@@ -47,7 +47,7 @@ func (s *Server) Mainloop() {
     // Bind to port
     lis, err := net.Listen("tcp", s.Config.Self.Addr)
     if err != nil {
-        log.Fatalf("failed to listen: %v", err)
+        log.Fatalf("Failed to listen: %v", err)
     }
     log.Printf("Listening: %s ...", s.Config.Self.Addr)
 
@@ -59,7 +59,7 @@ func (s *Server) Mainloop() {
 
     // Start server
     if err := rpc.Serve(lis); err != nil {
-        log.Fatalf("failed to serve: %v", err)
+        log.Fatalf("Failed to serve: %v", err)
     }
 }
 
