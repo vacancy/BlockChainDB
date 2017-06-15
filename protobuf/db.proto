@@ -1,0 +1,92 @@
+syntax = "proto3";
+
+option java_multiple_files = true;
+option java_package = "iiis.systems.os.blockchaindb";
+option java_outer_classname = "DBProto";
+
+package blockdb;
+
+// Interface exported by the server.
+service BlockChainMiner {
+    // Return UserID's Balance on the Chain, after considering the latest valid block. Pending transactions have no effect on Get()
+	rpc Get(GetRequest) returns (GetResponse) {}
+
+	// Receive and Broadcast Transaction: balance[FromID]-=Value, balance[ToID]+=(Value-MiningFee), balance[MinerID]+=MiningFee
+	// Return Success=false if FromID is same as ToID or latest balance of FromID is insufficient
+	rpc Transfer(Transaction) returns (BooleanResponse) {}
+
+	// Check if a transaction has been written into a block, or is still waiting, or is invalid on the longest branch.
+	rpc Verify(Transaction) returns (VerifyResponse) {}
+
+	// Get the current blockchain length; use the longest branch if multiple branch exist.
+	rpc GetHeight(Null) returns (GetHeightResponse) {}
+
+	// Get the Json representation of the block with BlockHash hash value
+	rpc GetBlock(GetBlockRequest) returns (JsonBlockString) {}
+
+	// Send a block to another server
+	rpc PushBlock(JsonBlockString) returns (Null) {}
+
+	// Send a transaction to another server
+	rpc PushTransaction(Transaction) returns (Null) {}
+
+}
+
+message GetBlockRequest {
+	string BlockHash = 1;
+}
+
+message GetRequest {
+	string UserID = 1;
+}
+
+message GetResponse {
+  int32 Value = 1;
+}
+
+message GetHeightResponse {
+  int32 Height = 1;
+  string LeafHash = 2;
+}
+
+message BooleanResponse {
+	bool Success = 1;
+}
+
+message VerifyResponse {
+	enum Results {
+		FAILED = 0;
+		PENDING = 1;
+		SUCCEEDED = 2;
+	}
+	Results Result = 1;
+	string BlockHash = 2;
+}
+
+message Null {}
+
+message Transaction {
+	enum Types {
+		UNKNOWN = 0;
+		TRANSFER = 5;
+	}
+	Types Type = 1;
+	reserved 2;
+	string FromID = 3; // Optional
+	string ToID = 4; // Optional
+	int32 Value = 5;
+	int32 MiningFee = 6;
+	string UUID = 7;
+}
+
+message JsonBlockString {
+	string Json = 1;
+}
+
+message Block {
+	int32 BlockID = 1;
+	string PrevHash = 2;
+	repeated Transaction Transactions = 3;
+	string MinerID = 4;
+	string Nonce = 5;
+}
