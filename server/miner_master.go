@@ -41,8 +41,23 @@ type MinerMaster interface {
 
     // Peer-side
     GetBlock(bid string) string
-    OnTransactionAsync(t *pb.Transaction)
     OnBlockAsync(json string)
+    OnTransactionAsync(t *pb.Transaction)
+}
+
+func NewMinerMaster(c *ServerConfig) (m MinerMaster, e error) {
+    p2pc := NewP2PClient(c)
+
+    switch c.Miner.MinerType {
+    case "Honest":
+        m = &HonestMinerMaster{
+            BaseMinerMaster: BaseMinerMaster{NewBlockChain(c, p2pc), p2pc},
+            config: c,
+        }
+    default:
+        e = fmt.Errorf("Invalid miner type: %s", c.Miner.MinerType)
+    }
+    return
 }
 
 type BaseMinerMaster struct {
@@ -72,19 +87,6 @@ type HonestMinerMaster struct {
     BaseMinerMaster
     config   *ServerConfig
     workers []MinerWorker
-}
-
-func NewMinerMaster(c *ServerConfig) (m MinerMaster, e error) {
-    switch c.Miner.MinerType {
-    case "Honest":
-        m = &HonestMinerMaster{
-            BaseMinerMaster: BaseMinerMaster{NewBlockChain(c), NewP2PClient(c)},
-            config: c,
-        }
-    default:
-        e = fmt.Errorf("Invalid miner type: %s", c.Miner.MinerType)
-    }
-    return
 }
 
 func (m *HonestMinerMaster) Recover() (err error) {

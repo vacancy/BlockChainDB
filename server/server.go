@@ -26,25 +26,33 @@ func NewServer(config *ServerConfig) (s *Server, err error) {
 
 // Client-side database interface 
 func (s *Server) Get(ctx context.Context, in *pb.GetRequest) (*pb.GetResponse, error) {
-    return &pb.GetResponse{Value: 1000}, nil
+    u := s.Master.GetUserInfo(in.UserID)
+    return &pb.GetResponse{Value: u.Money}, nil
 }
 func (s *Server) GetHeight(ctx context.Context, in *pb.Null) (*pb.GetHeightResponse, error) {
-    return &pb.GetHeightResponse{Height: 1, LeafHash: "?"}, nil
+    bi := s.Master.GetLatestBlock()
+    return &pb.GetHeightResponse{Height: bi.Block.BlockID, LeafHash: bi.Hash}, nil
 }
 func (s *Server) Verify(ctx context.Context, in *pb.Transaction) (*pb.VerifyResponse, error) {
-    return &pb.VerifyResponse{Result: pb.VerifyResponse_FAILED, BlockHash:"?"}, nil
+    rc, hash := s.Master.VerifyClientTransaction(in)
+    // HACK(MJY):: forced type casting
+    return &pb.VerifyResponse{Result: pb.VerifyResponse_Results(rc), BlockHash: hash}, nil
 }
 func (s *Server) Transfer(ctx context.Context, in *pb.Transaction) (*pb.BooleanResponse, error) {
-    return &pb.BooleanResponse{Success: true}, nil
+    succ := s.Master.OnClientTransactionAsync(in)
+    return &pb.BooleanResponse{Success: succ}, nil
 }
 
 func (s *Server) GetBlock(ctx context.Context, in *pb.GetBlockRequest) (*pb.JsonBlockString, error) {
-    return &pb.JsonBlockString{Json: "{}"}, nil
+    json := s.Master.GetBlock(in.BlockHash)
+    return &pb.JsonBlockString{Json: json}, nil
 }
 func (s *Server) PushBlock(ctx context.Context, in *pb.JsonBlockString) (*pb.Null, error) {
+    s.Master.OnBlockAsync(in.Json)
     return &pb.Null{}, nil
 }
 func (s *Server) PushTransaction(ctx context.Context, in *pb.Transaction) (*pb.Null, error) {
+    s.Master.OnTransactionAsync(in)
     return &pb.Null{}, nil
 }
 
