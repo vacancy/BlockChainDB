@@ -12,79 +12,95 @@ type UserInfo struct {
     Money int32
 }
 
+type BlockInfo struct {
+    Hash string
+    Json string
+    Block *pb.Block
+}
+
 type BlockChain struct {
     // hash(jsonify(b)) -> b
-    Blocks       map[string]*pb.Block
+    Blocks       map[string]*BlockInfo
     // t.UUID -> t
     Transactions map[string]*pb.Transaction
     // UserID -> money
     Users        map[string]*UserInfo
 
     // Tail block of the longest block chain
-    Latest     *pb.Block
-    LatestHash string
+    Latest      *BlockInfo
 
     config            *ServerConfig
     blocksMutex       *sync.RWMutex
     transactionsMutex *sync.RWMutex
     usersMutex        *sync.RWMutex
-    jsonMarshaller    *jsonpb.Marshaler
+    jsonMarshaler     *jsonpb.Marshaler
+    defaultUserInfo   *UserInfo
 }
 
 func NewBlockChain(c *ServerConfig) (bc *BlockChain) {
     return &BlockChain{
-        Blocks: make(map[string]*pb.Block),
+        Blocks: make(map[string]*BlockInfo),
         Transactions: make(map[string]*pb.Transaction),
         Users: make(map[string]*UserInfo),
         Latest: nil,
-        jsonMarshaller: &jsonpb.Marshaler{EnumsAsInts: false},
+        jsonMarshaler: &jsonpb.Marshaler{EnumsAsInts: false},
+        defaultUserInfo: &UserInfo{Money: bc.config.Common.DefaultMoney},
+
     }
 }
 
 // Public methods: block
 
-func (bc *BlockChain) GetBlock(hash string) (b *pb.Block, err error) {
+func (bc *BlockChain) GetBlock(hash string) (bi *BlockInfo, err error) {
     bc.blocksMutex.RLock()
     defer bc.blocksMutex.RUnlock()
-    // TODO:: done
-    err = nil
-    b = bc.Blocks[hash]
+    // TODO::
+    bi = bc.Blocks[hash]
     return
 }
 
-func (bc *BlockChain) GetLatestBlock() (hash string, b *pb.Block, err error) {
+func (bc *BlockChain) GetLatestBlock() (bi *BlockInfo) {
     bc.blocksMutex.RLock()
     defer bc.blocksMutex.RUnlock()
-    return bc.LatestHash, bc.Latest, err
+    return bc.Latest
 }
 
-func (bc *BlockChain) PushBlock(b *pb.Block, needVerify bool) (err error) {
-    // Return nil when success
+func (bc *BlockChain) PushBlock(json string, needVerify bool) (err error) {
+    block := &pb.Block{}
+    jsonpb.UnmarshalString(json, block)
+
+    bi := &BlockInfo{
+        Json: json,
+        Hash: GetHashString(json),
+        Block: block,
+    }
+
+    // Return nil when succeed.
     if (needVerify) {
-        err = bc.verifyBlock(b)
+        err = bc.verifyBlock(bi)
         if (err != nil) {
             return
         }
     }
 
-    err = bc.refreshBlockChain(b)
-    return
+    return bc.refreshBlockChain(bi)
 }
 
-func (bc *BlockChain) DeclareNewBlock(b *pb.Block) (err error) {
-    // Remove related transactions
+func (bc *BlockChain) DeclareNewBlock(json string) (err error) {
+    // Remove related transactions.
     // TODO(MJY):: Is this implementation correct?
-    return bc.PushBlock(b, false)
+    return bc.PushBlock(json, false)
 }
 
-func (bc *BlockChain) VerifyTransaction6(b *pb.Transaction) (rc int, err error) {
+func (bc *BlockChain) VerifyTransaction6(t *pb.Transaction) (rc int, hash string) {
     // Return return code and err 
     // Return code: 0=fail; 1=peding; 2=success.
     // TODO::
-    return 2, nil
+    return 2, "?"
 }
 
 func (bc *BlockChain) PushTransaction(t *pb.Transaction, needVerify bool) (err error) {
+    // Return nil when succeed.
     bc.transactionsMutex.Lock()
     defer bc.transactionsMutex.Unlock()
     // TODO:: done
@@ -93,6 +109,7 @@ func (bc *BlockChain) PushTransaction(t *pb.Transaction, needVerify bool) (err e
 }
 
 func (bc *BlockChain) RemoveTransaction(tid string) (err error) {
+    // Return nil when succeed.
     bc.transactionsMutex.Lock()
     defer bc.transactionsMutex.Unlock()
     // TODO:: done
@@ -104,10 +121,18 @@ func (bc *BlockChain) GetUserInfo(uid string) (u *UserInfo) {
     return bc.setDefaultUserInfo(uid)
 }
 
+func (bc *BlockChain) GetUserInfoWithDefault(uid string) (u *UserInfo) {
+    u = bc.getUserInfo(uid)
+    if u == nil {
+        return bc.defaultUserInfo
+    }
+    return u
+}
+
 // Private: Hash
 
 func (bc *BlockChain) getHashStringOfBlock(b *pb.Block) (s string, err error) {
-    jsonString, err := bc.jsonMarshaller.MarshalToString(b)
+    jsonString, err := bc.jsonMarshaler.MarshalToString(b)
     if err != nil {
         return
     }
@@ -118,27 +143,26 @@ func (bc *BlockChain) getHashStringOfBlock(b *pb.Block) (s string, err error) {
 
 // Private: Block
 
-func (bc *BlockChain) refreshBlockChain(b *pb.Block) (err error) {
+func (bc *BlockChain) refreshBlockChain(bi *BlockInfo) (err error) {
     bc.blocksMutex.Lock()
     defer bc.blocksMutex.Unlock()
 
-    hash, err := bc.getHashStringOfBlock(b)
-    if err != nil {
-        return err
-    }
-    bc.Blocks[hash] = b
+    // hash, err := bc.getHashStringOfBlock(b)
+    // if err != nil {
+    //     return err
+    // }
+    bc.Blocks[bi.Hash] = bi
 
     // Handle chain switch and go through the transactions in `b`
     bc.usersMutex.Lock()
     defer bc.usersMutex.Unlock()
     // TODO::
 
-    bc.LatestHash = hash
-    bc.Latest = b
+    bc.Latest = bi
     return
 }
 
-func (bc *BlockChain) verifyBlock(b *pb.Block) (err error) {
+func (bc *BlockChain) verifyBlock(bi *BlockInfo) (err error) {
     // Return nil when success
     // TODO:: partial done
     hash, err := bc.getHashStringOfBlock(b)
@@ -155,26 +179,21 @@ func (bc *BlockChain) verifyBlock(b *pb.Block) (err error) {
 
 // Private: User
 
-func (bc *BlockChain) getUserInfoRaw(uid string) (u *UserInfo, err error) {
+func (bc *BlockChain) getUserInfo(uid string) (u *UserInfo) {
     bc.usersMutex.RLock()
     defer bc.usersMutex.RUnlock()
-    return bc.getUserInfoAtomic(uid)
+    return bc.Users[uid]
 }
 
 func (bc *BlockChain) setDefaultUserInfo(uid string) (u *UserInfo) {
     bc.usersMutex.Lock()
     defer bc.usersMutex.Unlock()
 
-    u, err := bc.getUserInfoAtomic(uid)
-    if err != nil {
+    u = bc.Users[uid]
+    if u == nil {
         u = &UserInfo{Money: bc.config.Common.DefaultMoney}
         bc.Users[uid] = u
     }
     return
-}
-
-func (bc *BlockChain) getUserInfoAtomic(uid string) (u *UserInfo, err error) {
-    u = bc.Users[uid]
-    return u, nil
 }
 

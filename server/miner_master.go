@@ -31,14 +31,45 @@ func (r *OnReceiveResponse) Wait() bool {
 type MinerMaster interface {
     Recover() error
     Mainloop()
-    OnTransactionAsync(t *pb.Transaction) *OnReceiveResponse
-    OnBlockAsync(b *pb.Block) *OnReceiveResponse
+
+    // Client-side 
+    GetUserInfo(uid string) *UserInfo
+    GetLatestBlock() *BlockInfo
+    // transaction => return code, blockhash
+    VerifyClientTransaction(t *pb.Transaction) (int, string)
+    OnClientTransactionAsync(t *pb.Transaction) bool
+
+    // Peer-side
+    GetBlock(bid string) string
+    OnTransactionAsync(t *pb.Transaction)
+    OnBlockAsync(json string)
+}
+
+type BaseMinerMaster struct {
+    BC  *BlockChain
+    P2P *P2PClient
+}
+
+func (m *BaseMinerMaster) GetUserInfo(uid string) *UserInfo {
+    return m.BC.GetUserInfoWithDefault(uid)
+}
+
+func (m *BaseMinerMaster) GetLatestBlock() *BlockInfo {
+    return m.BC.GetLatestBlock()
+}
+
+func (m *BaseMinerMaster) VerifyClientTransaction(t *pb.Transaction) (rc int, hash string) {
+    rc, hash = m.BC.VerifyTransaction6(t)
+    return
+}
+
+func (m *BaseMinerMaster) OnClientTransactionAsync(t *pb.Transaction) bool {
+    err := m.BC.PushTransaction(t, true)
+    return err != nil
 }
 
 type HonestMinerMaster struct {
-    BC  *BlockChain
-    P2P *P2PClient
-
+    BaseMinerMaster
     config   *ServerConfig
     workers []MinerWorker
 }
@@ -47,8 +78,7 @@ func NewMinerMaster(c *ServerConfig) (m MinerMaster, e error) {
     switch c.Miner.MinerType {
     case "Honest":
         m = &HonestMinerMaster{
-            BC: NewBlockChain(c),
-            P2P: NewP2PClient(c),
+            BaseMinerMaster: BaseMinerMaster{NewBlockChain(c), NewP2PClient(c)},
             config: c,
         }
     default:
@@ -77,17 +107,16 @@ func (m *HonestMinerMaster) Mainloop() {
     }
 }
 
-func (m *HonestMinerMaster) OnTransactionAsync(t *pb.Transaction) *OnReceiveResponse {
-    response := NewOnReceiveResponse()
+func (m *HonestMinerMaster) GetBlock(bid string) (json string) {
     // TODO::
-    response.Finish()
-    return response
+    return "{}"
 }
 
-func (m *HonestMinerMaster) OnBlockAsync(b *pb.Block) *OnReceiveResponse {
-    response := NewOnReceiveResponse()
+func (m *HonestMinerMaster) OnTransactionAsync(t *pb.Transaction) {
     // TODO::
-    response.Finish()
-    return response
+}
+
+func (m *HonestMinerMaster) OnBlockAsync(json string) {
+    // TODO::
 }
 
