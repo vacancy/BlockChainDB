@@ -21,8 +21,12 @@ type BlockInfo struct {
 type BlockChain struct {
     // hash(jsonify(b)) -> b
     Blocks       map[string]*BlockInfo
+    // hash(jsonify(b)) -> valid(b)
+    ValidBlocks  map[string]bool
     // t.UUID -> t
     Transactions map[string]*pb.Transaction
+    // t.UUID -> []*BlockInfo
+    TransBlocks  map[string][]*BlockInfo
     // UserID -> money
     Users        map[string]*UserInfo
 
@@ -33,7 +37,9 @@ type BlockChain struct {
     p2pc              *P2PClient
 
     blocksMutex       *sync.RWMutex
+    validBlocksMutex  *sync.RWMutex
     transactionsMutex *sync.RWMutex
+    transBlocksMutex  *sync.RWMutex
     usersMutex        *sync.RWMutex
 
     jsonMarshaler     *jsonpb.Marshaler
@@ -43,7 +49,9 @@ type BlockChain struct {
 func NewBlockChain(c *ServerConfig, p2pc *P2PClient) (bc *BlockChain) {
     return &BlockChain{
         Blocks: make(map[string]*BlockInfo),
+        ValidBlocks: make(map[string]bool),
         Transactions: make(map[string]*pb.Transaction),
+        TransBlocks: make(map[string][]*BlockInfo),
         Users: make(map[string]*UserInfo),
         Latest: nil,
 
@@ -51,7 +59,9 @@ func NewBlockChain(c *ServerConfig, p2pc *P2PClient) (bc *BlockChain) {
         p2pc: p2pc,
 
         blocksMutex: &sync.RWMutex{},
+        validBlocksMutex: &sync.RWMutex{},
         transactionsMutex: &sync.RWMutex{},
+        transBlocksMutex: &sync.RWMutex{},
         usersMutex: &sync.RWMutex{},
 
         jsonMarshaler: &jsonpb.Marshaler{EnumsAsInts: false},
@@ -107,6 +117,27 @@ func (bc *BlockChain) VerifyTransaction6(t *pb.Transaction) (rc int, hash string
     // Return return code and err 
     // Return code: 0=fail; 1=peding; 2=success.
     // TODO::
+    bc.transBlocksMutex.RLock()
+    defer bc.transBlocksMutex.RUnlock()
+    bc.validBlocksMutex.RLock()
+    defer bc.validBlocksMutex.RUnlock()
+
+    if blocks, ok := bc.TransBlocks[t.UUID]; ok {
+        for _, block := range blocks {
+            if bc.ValidBlocks[block.Hash] {
+                return 2, block.Hash
+            }
+        }
+        return 1, blocks[0].Hash
+    }
+    bc.usersMutex.RLock()
+    defer bc.usersMutex.RUnlock()
+    if _, ok := bc.Transactions[t.UUID]; ok {
+        if bc.Users[t.FromID].Money >= t.Value {
+            return 1, "!"
+        }
+        return 0, "?"
+    }
     return 0, "?"
 }
 
@@ -198,6 +229,19 @@ func (bc *BlockChain) verifyBlock(bi *BlockInfo) (err error) {
 func (bc *BlockChain) verifyTransaction(t *pb.Transaction) (err error) {
     // Return nil when success
     // TODO::
+    if t.Type != pb.Transaction_TRANSFER {
+        return fmt.Errorf("Verify transaction failed, unsupported type: %s.", t.Type)
+    }
+    if t.MiningFee <= 0 {
+        return fmt.Errorf("Verify transaction failed, non-positive mining fee: %d", t.MiningFee)
+    }
+    if t.Value < 0 {
+        return fmt.Errorf("Verify transaction failed, negative value: %d", t.Value)
+    }
+    if t.Value <= t.MiningFee {
+        return fmt.Errorf("Verify transaction failed, insufficient value: %d, mining fee: %d.",
+            t.Value, t.MiningFee)
+    }
     return nil
 }
 
