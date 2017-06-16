@@ -73,20 +73,26 @@ func (p2pc *P2PClient) Close() {
 // Emit Get, Transfer, Verify.
 
 func (p2pc *P2PClient) RemoteGetBlock() {
+    // TODO::
 }
 
 func (p2pc *P2PClient) RemoteGetHeight() {
+    // TODO::
 }
 
 func (p2pc *P2PClient) RemotePushBlock() {
+    // TODO::
 }
 
 func (p2pc *P2PClient) RemotePushBlockAsync() {
+    // TODO::
 }
 
 func (p2pc *P2PClient) RemotePushTransaction() {
+    // TODO::
 }
 
 func (p2pc *P2PClient) RemotePushTransactionAsync() {
+    // TODO::
 }
 

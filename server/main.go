@@ -21,8 +21,14 @@ func main() {
     }
     config.Verbose()
 
-    server := NewServer(config)
-    server.Mainloop()
+    server, err := NewServer(config)
+    if err != nil {
+        panic(err)
+    }
+    err = server.Mainloop()
+    if err != nil {
+        panic(err)
+    }
 
     // _ = fmt.Sprintf("Server%02d",*id) //MinerID=
     // _ = hash.GetHashString

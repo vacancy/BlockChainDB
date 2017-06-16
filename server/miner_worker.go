@@ -1,14 +1,17 @@
 package main
 
-type WorkerInterface interface {
-    OnTransaction()
-    OnBlock()
+type MinerWorker interface {
     Mainloop()
 }
 
-type HonestWorker struct {
+type SimpleMinerWorker struct {
 }
 
-func NewHonestWorker() (w *HonestWorker) {
-    return &HonestWorker{}
+func NewSimpleMinerWorker(m MinerMaster) (w *SimpleMinerWorker) {
+    return &SimpleMinerWorker{}
 }
+
+func (w *SimpleMinerWorker) Mainloop() {
+
+}
+

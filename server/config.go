@@ -9,6 +9,7 @@ import (
 
 type CommonConfig struct {
     MaxBlockSize int
+    DefaultMoney int32
 }
 
 type RemoteServerConfig struct {
@@ -21,11 +22,17 @@ type SnapshotConfig struct {
     SnapshotInterval int
 }
 
+type MinerConfig struct {
+    MinerType string
+    NrWorkers int
+}
+
 type ServerConfig struct {
     Common    *CommonConfig
     Servers []*RemoteServerConfig
     Self      *RemoteServerConfig
     Snapshot  *SnapshotConfig
+    Miner     *MinerConfig
 }
 
 func NewServerConfig(configFilename string, selfID string) (config *ServerConfig, err error) {
@@ -67,10 +74,16 @@ func NewServerConfig(configFilename string, selfID string) (config *ServerConfig
 
     config.Common = &CommonConfig{
         MaxBlockSize: 50,
+        DefaultMoney: 1000,
     }
 
     config.Snapshot = &SnapshotConfig {
         SnapshotInterval: 0,
+    }
+
+    config.Miner = &MinerConfig {
+        MinerType: "Honest",
+        NrWorkers: 1,
     }
 
     return
@@ -82,6 +95,7 @@ func (config *ServerConfig) Verbose() {
 
     log.Println("Common configuration")
     log.Printf("- MaxBlockSize: %d\n", config.Common.MaxBlockSize)
+    log.Printf("- DefaultMoney: %d\n", config.Common.DefaultMoney)
     log.Println("")
 
     log.Println("Snapshot configuration")
@@ -92,6 +106,11 @@ func (config *ServerConfig) Verbose() {
     log.Printf("- Server ID: %s\n", config.Self.ID)
     log.Printf("- Server Addr: %s\n", config.Self.Addr)
     log.Printf("- Server DataDir: %s\n", config.Self.DataDir)
+    log.Println("")
+
+    log.Println("Miner configuration")
+    log.Printf("- MinerType: %s\n", config.Miner.MinerType)
+    log.Printf("- NrWorkers: %s\n", config.Miner.NrWorkers)
     log.Println("")
 
     log.Println("Servers configuration")

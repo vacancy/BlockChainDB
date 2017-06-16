@@ -12,12 +12,17 @@ import (
 
 type Server struct{
     Config *ServerConfig
+    Master  MinerMaster
 }
 
-func NewServer(config *ServerConfig) (s *Server) {
-    return &Server{Config: config}
+func NewServer(config *ServerConfig) (s *Server, err error) {
+    s = &Server{Config: config}
+    s.Master, err = NewMinerMaster(config)
+    if err != nil {
+        return
+    }
+    return
 }
-
 
 // Database Interface 
 func (s *Server) Get(ctx context.Context, in *pb.GetRequest) (*pb.GetResponse, error) {
@@ -43,11 +48,14 @@ func (s *Server) PushTransaction(ctx context.Context, in *pb.Transaction) (*pb.N
     return &pb.Null{}, nil
 }
 
-func (s *Server) Mainloop() {
+func (s *Server) Mainloop() (err error) {
+    // Should start master here
+
     // Bind to port
     lis, err := net.Listen("tcp", s.Config.Self.Addr)
     if err != nil {
-        log.Fatalf("Failed to listen: %v", err)
+        log.Printf("Failed to listen: %v", err)
+        return
     }
     log.Printf("Listening: %s ...", s.Config.Self.Addr)
 
@@ -58,8 +66,11 @@ func (s *Server) Mainloop() {
     reflection.Register(rpc)
 
     // Start server
-    if err := rpc.Serve(lis); err != nil {
-        log.Fatalf("Failed to serve: %v", err)
+    if err = rpc.Serve(lis); err != nil {
+        log.Printf("Failed to serve: %v", err)
+        return
     }
+
+    return
 }
 
