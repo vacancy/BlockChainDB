@@ -81,4 +81,3 @@ func (s *Server) Mainloop() (err error) {
 
     return
 }
-

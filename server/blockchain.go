@@ -3,6 +3,7 @@ package main
 import (
     "sync"
     "fmt"
+    "strings"
 
     pb "../protobuf/go"
     "github.com/golang/protobuf/jsonpb"
@@ -20,14 +21,20 @@ type BlockInfo struct {
 
 type BlockChain struct {
     // hash(jsonify(b)) -> b
-    Blocks       map[string]*BlockInfo
+    Blocks             map[string]*BlockInfo
     // t.UUID -> t
-    Transactions map[string]*pb.Transaction
+    ActiveTransactions map[string]*pb.Transaction
+    BlockTransactions  map[string]*pb.Transaction
     // UserID -> money
-    Users        map[string]*UserInfo
+    Users              map[string]*UserInfo
 
     // Tail block of the longest block chain
-    Latest      *BlockInfo
+    Latest *BlockInfo
+
+    // Callbacks
+    OnChangeLatestCallbacks []func ()
+    OnAddActiveCallbacks []func (string)
+    OnRemoveActiveCallbacks []func (string)
 
     config            *ServerConfig
     p2pc              *P2PClient
@@ -45,7 +52,11 @@ func NewBlockChain(c *ServerConfig, p2pc *P2PClient) (bc *BlockChain) {
         Blocks: make(map[string]*BlockInfo),
         Transactions: make(map[string]*pb.Transaction),
         Users: make(map[string]*UserInfo),
-        Latest: nil,
+        Latest: &BlockInfo{
+            Json: "{}",
+            Block: &pb.Block{BlockID: 0},
+            Hash: strings.Repeat("0", 64),
+        },
 
         config: c,
         p2pc: p2pc,
@@ -57,6 +68,9 @@ func NewBlockChain(c *ServerConfig, p2pc *P2PClient) (bc *BlockChain) {
         jsonMarshaler: &jsonpb.Marshaler{EnumsAsInts: false},
         defaultUserInfo: &UserInfo{Money: bc.config.Common.DefaultMoney},
 
+        OnChangeLatestCallbacks: make([]func (), 0)
+        OnAddActiveCallbacks: make([]func (string), 0)
+        OnRemoveActiveCallbacks: make([]func (string), 0)
     }
 }
 
@@ -114,17 +128,10 @@ func (bc *BlockChain) PushTransaction(t *pb.Transaction, needVerify bool) (err e
     // Return nil when succeed.
     bc.transactionsMutex.Lock()
     defer bc.transactionsMutex.Unlock()
-    // TODO:: done
-    bc.Transactions[t.UUID] = t
-    return nil
-}
+    // TODO:: 
+    bc.ActiveTransactions[t.UUID] = t
+    bc.triggerCallbacks("AddActive", t.UUID)
 
-func (bc *BlockChain) RemoveTransaction(tid string) (err error) {
-    // Return nil when succeed.
-    bc.transactionsMutex.Lock()
-    defer bc.transactionsMutex.Unlock()
-    // TODO:: done
-    delete(bc.Transactions, tid)
     return nil
 }
 
@@ -158,18 +165,20 @@ func (bc *BlockChain) refreshBlockChain(bi *BlockInfo) (err error) {
     bc.blocksMutex.Lock()
     defer bc.blocksMutex.Unlock()
 
-    // hash, err := bc.getHashStringOfBlock(b)
-    // if err != nil {
-    //     return err
-    // }
     bc.Blocks[bi.Hash] = bi
+    bc.Latest = bi
+    bc.triggerCallbacks("ChangeLatest")
 
     // Handle chain switch and go through the transactions in `b`
     bc.usersMutex.Lock()
     defer bc.usersMutex.Unlock()
     // TODO::
 
-    bc.Latest = bi
+    // Transfer all transactions
+    bc.TransactionsMutex.Lock()
+    defer bc.TransactionsMutex.Unlock()
+    bc.triggerCallbacks("RemoveActive", "")
+
     return
 }
 
@@ -208,3 +217,19 @@ func (bc *BlockChain) setDefaultUserInfo(uid string) (u *UserInfo) {
     return
 }
 
+func (bc *BlockChain) triggerCallbacks(funcname string, ...param string) {
+    switch funcname {
+    case "ChangeLatest":
+        for _, c := range bc.OnChangeLatestCallbacks {
+            c()
+        }
+    case "AddActive":
+        for _, c := range bc.OnAddActiveCallbacks {
+            c(...param)
+        }
+    case "RemoveActive":
+        for _, c := range bc.OnRemoveActiveCallbacks {
+            c(...param)
+        }
+    }
+}
