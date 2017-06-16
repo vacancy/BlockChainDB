@@ -165,7 +165,7 @@ func (bc *BlockChain) refreshBlockChain(bi *BlockInfo) (err error) {
 func (bc *BlockChain) verifyBlock(bi *BlockInfo) (err error) {
     // Return nil when success
     // TODO:: partial done
-    hash, err := bc.getHashStringOfBlock(b)
+    hash, err := bc.getHashStringOfBlock(bi.Block)
     if err != nil {
         return err
     }
