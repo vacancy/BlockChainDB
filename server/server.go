@@ -24,20 +24,20 @@ func NewServer(config *ServerConfig) (s *Server, err error) {
     return
 }
 
-// Database Interface 
+// Client-side database interface 
 func (s *Server) Get(ctx context.Context, in *pb.GetRequest) (*pb.GetResponse, error) {
     return &pb.GetResponse{Value: 1000}, nil
 }
-func (s *Server) Transfer(ctx context.Context, in *pb.Transaction) (*pb.BooleanResponse, error) {
-    return &pb.BooleanResponse{Success: true}, nil
+func (s *Server) GetHeight(ctx context.Context, in *pb.Null) (*pb.GetHeightResponse, error) {
+    return &pb.GetHeightResponse{Height: 1, LeafHash: "?"}, nil
 }
 func (s *Server) Verify(ctx context.Context, in *pb.Transaction) (*pb.VerifyResponse, error) {
     return &pb.VerifyResponse{Result: pb.VerifyResponse_FAILED, BlockHash:"?"}, nil
 }
-
-func (s *Server) GetHeight(ctx context.Context, in *pb.Null) (*pb.GetHeightResponse, error) {
-    return &pb.GetHeightResponse{Height: 1, LeafHash: "?"}, nil
+func (s *Server) Transfer(ctx context.Context, in *pb.Transaction) (*pb.BooleanResponse, error) {
+    return &pb.BooleanResponse{Success: true}, nil
 }
+
 func (s *Server) GetBlock(ctx context.Context, in *pb.GetBlockRequest) (*pb.JsonBlockString, error) {
     return &pb.JsonBlockString{Json: "{}"}, nil
 }
