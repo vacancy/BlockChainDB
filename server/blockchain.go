@@ -2,6 +2,7 @@ package main
 
 import (
     "sync"
+    "fmt"
 
     pb "../protobuf/go"
     "github.com/golang/protobuf/jsonpb"
@@ -104,7 +105,7 @@ func (bc *BlockChain) DeclareNewBlock(json string) (err error) {
 
 func (bc *BlockChain) VerifyTransaction6(t *pb.Transaction) (rc int, hash string) {
     // Return return code and err 
-    // Return code: 0=; 1=; 2=.
+    // Return code: 0=fail; 1=peding; 2=success.
     // TODO::
     return 0, "?"
 }
@@ -113,7 +114,8 @@ func (bc *BlockChain) PushTransaction(t *pb.Transaction, needVerify bool) (err e
     // Return nil when succeed.
     bc.transactionsMutex.Lock()
     defer bc.transactionsMutex.Unlock()
-    // TODO::
+    // TODO:: done
+    bc.Transactions[t.UUID] = t
     return nil
 }
 
@@ -121,7 +123,8 @@ func (bc *BlockChain) RemoveTransaction(tid string) (err error) {
     // Return nil when succeed.
     bc.transactionsMutex.Lock()
     defer bc.transactionsMutex.Unlock()
-    // TODO::
+    // TODO:: done
+    delete(bc.Transactions, tid)
     return nil
 }
 
@@ -172,6 +175,15 @@ func (bc *BlockChain) refreshBlockChain(bi *BlockInfo) (err error) {
 
 func (bc *BlockChain) verifyBlock(bi *BlockInfo) (err error) {
     // Return nil when success
+    // TODO:: partial done
+    hash, err := bc.getHashStringOfBlock(bi.Block)
+    if err != nil {
+        return err
+    }
+    succ := CheckHash(hash)
+    if succ == false {
+        return fmt.Errorf("Verify block failed, invalid hash: %s.", hash)
+    }
     // TODO::
     return nil
 }
