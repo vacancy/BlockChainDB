@@ -2,6 +2,7 @@ package main
 
 import (
     "sync"
+    "fmt"
 
     pb "../protobuf/go"
     "github.com/golang/protobuf/jsonpb"
@@ -45,7 +46,8 @@ func NewBlockChain(c *ServerConfig) (bc *BlockChain) {
 func (bc *BlockChain) GetBlock(hash string) (b *pb.Block, err error) {
     bc.blocksMutex.RLock()
     defer bc.blocksMutex.RUnlock()
-    // TODO::
+    // TODO:: done
+    err = nil
     b = bc.Blocks[hash]
     return
 }
@@ -75,9 +77,9 @@ func (bc *BlockChain) DeclareNewBlock(b *pb.Block) (err error) {
     return bc.PushBlock(b, false)
 }
 
-func (bc *BlockChain) VerifyTransaction6(b *pb.Block) (rc int, err error) {
+func (bc *BlockChain) VerifyTransaction6(b *pb.Transaction) (rc int, err error) {
     // Return return code and err 
-    // Return code: 0=; 1=; 2=.
+    // Return code: 0=fail; 1=peding; 2=success.
     // TODO::
     return 2, nil
 }
@@ -85,14 +87,16 @@ func (bc *BlockChain) VerifyTransaction6(b *pb.Block) (rc int, err error) {
 func (bc *BlockChain) PushTransaction(t *pb.Transaction, needVerify bool) (err error) {
     bc.transactionsMutex.Lock()
     defer bc.transactionsMutex.Unlock()
-    // TODO::
+    // TODO:: done
+    bc.Transactions[t.UUID] = t
     return nil
 }
 
 func (bc *BlockChain) RemoveTransaction(tid string) (err error) {
     bc.transactionsMutex.Lock()
     defer bc.transactionsMutex.Unlock()
-    // TODO::
+    // TODO:: done
+    delete(bc.Transactions, tid)
     return nil
 }
 
@@ -136,6 +140,15 @@ func (bc *BlockChain) refreshBlockChain(b *pb.Block) (err error) {
 
 func (bc *BlockChain) verifyBlock(b *pb.Block) (err error) {
     // Return nil when success
+    // TODO:: partial done
+    hash, err := bc.getHashStringOfBlock(b)
+    if err != nil {
+        return err
+    }
+    succ := CheckHash(hash)
+    if succ == false {
+        return fmt.Errorf("Verify block failed, invalid hash: %s.", hash)
+    }
     // TODO::
     return nil
 }
