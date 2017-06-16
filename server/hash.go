@@ -1,21 +1,22 @@
 package main
 
 import (
-    "crypto/sha256"
     "fmt"
     "math/rand"
+
+    "../hash"
 )
 
 func GetHashString(String string) string {
-	return fmt.Sprintf("%x", GetHashBytes(String))
+    return hash.GetHashString(String)
 }
 
 func GetHashBytes(String string) [32]byte {
-	return sha256.Sum256([]byte(String))
+    return hash.GetHashBytes(String)
 }
 
 func CheckHash(Hash string) bool {
-	return Hash[0:5]=="00000"
+    return hash.CheckHash(Hash)
 }
 
 func UUID128bit() string {
