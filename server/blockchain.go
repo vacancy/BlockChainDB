@@ -29,19 +29,30 @@ type BlockChain struct {
     Latest      *BlockInfo
 
     config            *ServerConfig
+    p2pc              *P2PClient
+
     blocksMutex       *sync.RWMutex
     transactionsMutex *sync.RWMutex
     usersMutex        *sync.RWMutex
+
     jsonMarshaler     *jsonpb.Marshaler
     defaultUserInfo   *UserInfo
 }
 
-func NewBlockChain(c *ServerConfig) (bc *BlockChain) {
+func NewBlockChain(c *ServerConfig, p2pc *P2PClient) (bc *BlockChain) {
     return &BlockChain{
         Blocks: make(map[string]*BlockInfo),
         Transactions: make(map[string]*pb.Transaction),
         Users: make(map[string]*UserInfo),
         Latest: nil,
+
+        config: c,
+        p2pc: p2pc,
+
+        blocksMutex: &sync.RWMutex{},
+        transactionsMutex: &sync.RWMutex{},
+        usersMutex: &sync.RWMutex{},
+
         jsonMarshaler: &jsonpb.Marshaler{EnumsAsInts: false},
         defaultUserInfo: &UserInfo{Money: bc.config.Common.DefaultMoney},
 
@@ -95,7 +106,7 @@ func (bc *BlockChain) VerifyTransaction6(t *pb.Transaction) (rc int, hash string
     // Return return code and err 
     // Return code: 0=; 1=; 2=.
     // TODO::
-    return 2, "?"
+    return 0, "?"
 }
 
 func (bc *BlockChain) PushTransaction(t *pb.Transaction, needVerify bool) (err error) {
