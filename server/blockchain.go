@@ -103,7 +103,13 @@ func (bc *BlockChain) PushTransaction(t *pb.Transaction, needVerify bool) (err e
     // Return nil when succeed.
     bc.transactionsMutex.Lock()
     defer bc.transactionsMutex.Unlock()
-    // TODO:: done
+    // TODO:: 
+    if needVerify {
+        err = bc.verifyTransaction(t)
+        if (err != nil) {
+            return
+        }
+    }
     bc.Transactions[t.UUID] = t
     return nil
 }
@@ -173,6 +179,13 @@ func (bc *BlockChain) verifyBlock(bi *BlockInfo) (err error) {
     if succ == false {
         return fmt.Errorf("Verify block failed, invalid hash: %s.", hash)
     }
+    // TODO::
+    return nil
+}
+
+// Private: Transaction
+func (bc *BlockChain) verifyTransaction(t *pb.Transaction) (err error) {
+    // Return nil when success
     // TODO::
     return nil
 }
