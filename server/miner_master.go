@@ -40,7 +40,7 @@ type MinerMaster interface {
     OnClientTransactionAsync(t *pb.Transaction) bool
 
     // Peer-side
-    GetBlock(bid string) string
+    GetBlock(bid string) *BlockInfo
     OnBlockAsync(json string)
     OnTransactionAsync(t *pb.Transaction)
 }
@@ -78,19 +78,15 @@ func (m *BaseMinerMaster) VerifyClientTransaction(t *pb.Transaction) (rc int, ha
     return
 }
 
-func (m *BaseMinerMaster) OnClientTransactionAsync(t *pb.Transaction) bool {
-    err := m.BC.PushTransaction(t, true)
-    return err != nil
-}
-
 type HonestMinerMaster struct {
     BaseMinerMaster
+
     config   *ServerConfig
     workers []MinerWorker
 }
 
 func (m *HonestMinerMaster) Recover() (err error) {
-    // Recover
+    // TODO:: 
     return nil
 }
 
@@ -109,16 +105,47 @@ func (m *HonestMinerMaster) Mainloop() {
     }
 }
 
-func (m *HonestMinerMaster) GetBlock(bid string) (json string) {
-    // TODO::
-    return "{}"
+func (m *HonestMinerMaster) GetBlock(bid string) *BlockInfo {
+    b, ok := m.BC.GetBlock(bid)
+    if !ok {
+        return nil
+    }
+    return b
+}
+
+func (m *HonestMinerMaster) OnClientTransactionAsync(t *pb.Transaction) bool {
+    return m.processTransaction(t)
 }
 
 func (m *HonestMinerMaster) OnTransactionAsync(t *pb.Transaction) {
-    // TODO::
+    _ = m.processTransaction(t)
 }
 
 func (m *HonestMinerMaster) OnBlockAsync(json string) {
-    // TODO::
+    oldLatest := m.BC.GetLatestBlock()
+    // TODO:: 
+    _, err := m.BC.PushBlockJson(json)
+    if err == nil {
+        newLatest := m.BC.GetLatestBlock()
+        if oldLatest.Hash != newLatest.Hash {
+            // TODO:: Notify
+        }
+    }
 }
 
+func (m *HonestMinerMaster) processTransaction(t *pb.Transaction) bool {
+    // TODO:: Flow control
+
+    // err := m.BC.PushTransaction(t, true)
+    var err error = nil
+    if err != nil {
+        return false
+    }
+
+    // TODO:: Notify
+    return true
+}
+
+func (m *HonestMinerMaster) gatherBatch() bool {
+    return true
+}

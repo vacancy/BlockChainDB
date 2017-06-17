@@ -29,7 +29,4 @@ func main() {
     if err != nil {
         panic(err)
     }
-
-    // _ = fmt.Sprintf("Server%02d",*id) //MinerID=
-    // _ = hash.GetHashString
 }
