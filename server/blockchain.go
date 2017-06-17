@@ -297,8 +297,7 @@ func (bc *BlockChain) findBlockLCA(x *BlockInfo, y *BlockInfo) (z *BlockInfo) {
 func (bc *BlockChain) verifyBlock(bi *BlockInfo) (err error) {
     // We only verify basic info here (do not check whether the transaction itself is valid or not).
     // Return nil when succeed.
-    succ := CheckHash(bi.Hash)
-    if succ == false {
+    if !CheckHash(bi.Hash) {
         return fmt.Errorf("Verify block failed, invalid hash: %s.", bi.Hash)
     }
     b := bi.Block

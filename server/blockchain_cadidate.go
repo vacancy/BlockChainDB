@@ -23,6 +23,8 @@ func NewBlockChainTStack(bc *BlockChain, needLock bool) *BlockChainTStack {
     if needLock {
         st.BC.UserMutex.RLock()
     }
+
+    return st
 }
 
 func (st *BlockChainTStack) Close() {
@@ -54,8 +56,8 @@ func (st *BlockChainTStack) doTransaction(t *pb.Transaction) (err error){
     fromMoney := st.getMoney(t.FromID)
     toMoney := st.getMoney(t.ToID)
 
-    UserMoney[t.FromID] = fromMoney - t.Value
-    UserMoney[t.ToID] = toMoney + (t.Value - t.MiningFee)
+    st.UserMoney[t.FromID] = fromMoney - t.Value
+    st.UserMoney[t.ToID] = toMoney + (t.Value - t.MiningFee)
     return nil
 }
 
