@@ -36,6 +36,17 @@ func (r *P2PResponse) AcquireClose() {
     r.acquiredClose = true
 }
 
+func (r *P2PResponse) IgnoreLater() {
+    go func() {
+        for {
+            _, more := <-r.channel
+            if !more {
+                break
+            }
+        }
+    }()
+}
+
 func (r *P2PResponse) Get() proto.Message {
     if r.acquiredClose {
         return nil
