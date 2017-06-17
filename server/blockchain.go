@@ -190,7 +190,7 @@ func (bc *BlockChain) VerifyTransaction6(t *pb.Transaction) (rc int, hash string
     defer bc.BlockMutex.RUnlock()
 
     if err := bc.verifyTransactionUUID(t); err != nil {
-        return 0
+        return 0, "?"
     }
 
     if blocks, ok := bc.Trans2Blocks[t.UUID]; ok {
@@ -263,7 +263,7 @@ func (bc *BlockChain) addBlock(bi *BlockInfo) {
     // Require BlockMutex
 
     bc.Blocks[bi.Hash] = bi
-    for _, trans := range bi.Blocks.Transactions {
+    for _, trans := range bi.Block.Transactions {
         blocks := bc.Trans2Blocks[trans.UUID]
         if blocks == nil {
             blocks = make([]*BlockInfo, 0)
@@ -277,6 +277,7 @@ func (bc *BlockChain) refreshBlockChain(bi *BlockInfo) (latestChanged bool, err 
     // Handle chain switch and go through the transactions in `b`
     bc.addBlock(bi)
 
+    b := bi.Block
     height := bc.LatestBlock.Block.BlockID
     latestChanged = b.BlockID > height || b.BlockID == height && bi.Hash < bc.LatestBlock.Hash
     if !latestChanged {
@@ -284,15 +285,15 @@ func (bc *BlockChain) refreshBlockChain(bi *BlockInfo) (latestChanged bool, err 
     }
 
     if b.BlockID == height + 1 && b.PrevHash == bc.LatestBlock.Hash {
-        latestChanged := bc.extendLatestBlock(bi)
+        latestChanged = bc.extendLatestBlock(bi)
     } else {
-        latestChanged := bc.switchLatestBlock(bc.LatestBlock, bi)
+        latestChanged = bc.switchLatestBlock(bc.LatestBlock, bi)
     }
     return
 }
 
 func (bc *BlockChain) extendLatestBlock(bi *BlockInfo) (succ bool) {
-    if err := verifyBlockTransaction(bi); err == nil {
+    if err := bc.verifyBlockTransaction(bi); err == nil {
         bc.doBlock(bi)
         bc.LatestBlock = bi
         return true
@@ -322,12 +323,12 @@ func (bc *BlockChain) switchLatestBlock(x *BlockInfo, y *BlockInfo) (succ bool) 
         y = bc.Blocks[y.Block.PrevHash]
     }
 
-    succ = switchLatestBlock_undodo(undos, dos)
+    succ = bc.switchLatestBlock_undodo(undos, dos)
     if !succ {
         return
     }
 
-    bc.LatestBlock = bi
+    bc.LatestBlock = y
     return true
 }
 
@@ -352,7 +353,7 @@ func (bc *BlockChain) switchLatestBlock_complete(bi *BlockInfo) (succ bool) {
             break
         }
 
-        response := bc.p2pc.RemoveGetBlock(prev)
+        response := bc.p2pc.RemoteGetBlock(prev)
         for {
             msg := response.Get()
             if msg == nil {
@@ -378,34 +379,34 @@ func (bc *BlockChain) switchLatestBlock_complete(bi *BlockInfo) (succ bool) {
                 continue
             }
 
-            if bc.verifyBlockInfo(newBi) {
+            if err = bc.verifyBlockInfo(newBi); err != nil {
                 bc.Blocks[prev] = newBi
                 response.AcquireClose()
                 break
             }
         }
 
-        bi := bc.Blocks[prev]
+        bi = bc.Blocks[prev]
     }
 
     return true
 }
 
-func (bc *BlockChain) switchLatestBlock_undodo(undos []*BlockInfo, dos []*BlockInfo, cur int) (succ bool) {
+func (bc *BlockChain) switchLatestBlock_undodo(undos []*BlockInfo, dos []*BlockInfo) (succ bool) {
     // Undo and do; once fail, rollback.
     for _, bi := range undos {
         bc.undoBlock(bi)
     }
 
-    succ := true
+    succ = true
     for i := len(dos) - 1; i >= 0; i-- {
         bi := dos[i]
 
-        if err := verifyBlockTransaction(bi); err == nil {
-            bc.Do(bi)
+        if err := bc.verifyBlockTransaction(bi); err == nil {
+            bc.doBlock(bi)
         } else {
             for j := i + 1; j < len(dos); j++ {
-                bc.Undo(dos[j])
+                bc.undoBlock(dos[j])
             }
             succ = false
             break
@@ -434,7 +435,7 @@ func (bc *BlockChain) verifyBlockInfo(bi *BlockInfo) (err error) {
     }
 
     // Check basic transaction info
-    for _, t := range b.Transactions {
+    for _, t := range bi.Block.Transactions {
         if err = bc.verifyTransactionInfo(t); err != nil {
             return err
         }
@@ -495,7 +496,7 @@ func (bc *BlockChain) verifyTransactionInfo(t *pb.Transaction) (err error) {
     return nil
 }
 
-func (bc *BlockChain) verifyTransactionUUID(t *Pb.Transaction) (err error) {
+func (bc *BlockChain) verifyTransactionUUID(t *pb.Transaction) (err error) {
     // Verify whether there is some transaction with same UUID but different value.
     // Return nil when succeed.
     // Require: BlockMutex.R, TransactionMutex.R
@@ -516,6 +517,7 @@ func (bc *BlockChain) verifyTransactionRepeat(t *pb.Transaction) (err error) {
             }
         }
     }
+    return nil
 }
 
 func (bc *BlockChain) verifyTransactionMoney(t *pb.Transaction) (err error) {

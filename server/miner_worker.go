@@ -1,12 +1,14 @@
 package main
 
 import (
+    "fmt"
     "sync"
 )
 
 type MinerWorker interface {
-    UpdateWorkingBlock(string prefix, string suffix)
+    UpdateWorkingBlock(prefix string, suffix string)
     Mainloop()
+    Working() bool
 }
 
 type SimpleMinerWorker struct {
@@ -20,15 +22,15 @@ type SimpleMinerWorker struct {
 
 func NewSimpleMinerWorker(m MinerMaster) (w *SimpleMinerWorker) {
     return &SimpleMinerWorker{
-        master: master,
+        master: m,
         prefix: "",
         suffix: "",
         change: make(chan bool),
-        mutex: &sync.Mutex{}
+        mutex: &sync.Mutex{},
     }
 }
 
-func (w *SimpleMinerWorker) UpdateWorkingBlock(string prefix, string suffix) {
+func (w *SimpleMinerWorker) UpdateWorkingBlock(prefix string, suffix string) {
     w.mutex.Lock()
     defer w.mutex.Unlock()
 
@@ -37,19 +39,23 @@ func (w *SimpleMinerWorker) UpdateWorkingBlock(string prefix, string suffix) {
     w.change <- true
 }
 
+func (w *SimpleMinerWorker) Working() bool {
+    return w.working
+}
+
 func (w *SimpleMinerWorker) Mainloop() {
-    w,working = false
+    w.working = false
     var prefix string
     var suffix string
     var next int64 = 0
 
     for {
-        var changed: false
+        changed := false
         if !w.working {
-            changed = <-w.changed
+            changed = <-w.change
         } else {
             select {
-            case _ = <-w.changed:
+            case _ = <-w.change:
                 changed = true
             default:
                 changed = false
@@ -60,6 +66,17 @@ func (w *SimpleMinerWorker) Mainloop() {
             w.working = true
 
             w.mutex.Lock()
+
+            // Remove all messages from the chan
+            for {
+                select {
+                case _ = <-w.change:
+                    // pass
+                default:
+                    break
+                }
+            }
+
             prefix = prefix
             suffix = suffix
             w.mutex.Unlock()
@@ -71,11 +88,11 @@ func (w *SimpleMinerWorker) Mainloop() {
             nonce := fmt.Sprintf("%08x", next)
 
             str := prefix + nonce + suffix
-            hash := GetHashOfString(str)
+            hash := GetHashString(str)
             succ := CheckHash(hash)
 
             if succ {
-                m.OnWorkerSuccess(str)
+                w.master.OnWorkerSuccess(str)
                 w.working = false
             }
 

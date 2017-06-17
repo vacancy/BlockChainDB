@@ -8,6 +8,7 @@ import (
     "sync"
 
     pb "../protobuf/go"
+    "github.com/golang/protobuf/jsonpb"
 )
 
 type OnReceiveResponse struct {
@@ -49,20 +50,20 @@ type MinerMaster interface {
     OnWorkerSuccess(json string)
 }
 
-func NewMinerMaster(c *ServerConfig) (m MinerMaster, e error) {
+func NewMinerMaster(c *ServerConfig) (master MinerMaster, e error) {
     p2pc := NewP2PClient(c)
 
     switch c.Miner.MinerType {
     case "Honest":
-        m = &HonestMinerMaster{
+        m := &HonestMinerMaster{
             BaseMinerMaster: BaseMinerMaster{
                 BC: NewBlockChain(c, p2pc),
                 P2PC: p2pc,
                 jsonMarshaler: &jsonpb.Marshaler{EnumsAsInts: false},
-                updateMutex: &sync.Mutex{}
             },
             config: c,
-            workers: make([]MinerWorker, 0)
+            workers: make([]MinerWorker, 0),
+            updateMutex: &sync.Mutex{},
         }
 
         // Start workers
@@ -72,6 +73,8 @@ func NewMinerMaster(c *ServerConfig) (m MinerMaster, e error) {
             m.workers = append(m.workers, w)
             go w.Mainloop()
         }
+
+        master = m
 
     default:
         e = fmt.Errorf("Invalid miner type: %s", c.Miner.MinerType)
@@ -128,6 +131,12 @@ func (m *HonestMinerMaster) GetBlock(bid string) *BlockInfo {
 }
 
 func (m *HonestMinerMaster) OnClientTransactionAsync(t *pb.Transaction) bool {
+    // Broadcast::
+    if true {
+        res := m.P2PC.RemotePushTransactionAsync(t)
+        _ = res.Get()
+        res.IgnoreLater()
+    }
     return m.processTransaction(t)
 }
 
@@ -136,7 +145,7 @@ func (m *HonestMinerMaster) OnTransactionAsync(t *pb.Transaction) {
 }
 
 func (m *HonestMinerMaster) OnBlockAsync(json string) {
-    lastChanged, err := m.BC.PushBlockJson(json)
+    lastChanged, _ := m.BC.PushBlockJson(json)
     if lastChanged {
         // TODO:: Accelerate the selection
         // First, test whether the current working block is valid or not.
@@ -147,7 +156,7 @@ func (m *HonestMinerMaster) OnBlockAsync(json string) {
 func (m *HonestMinerMaster) OnWorkerSuccess(json string) {
     _, err := m.BC.DeclareBlockJson(json)
     if err != nil {
-        _ := m.P2PC.RemotePushBlock(json)
+        _ = m.P2PC.RemotePushBlockAsync(json)
         m.updateWorkingSet(true)
     }
 }
@@ -173,8 +182,8 @@ func (m *HonestMinerMaster) updateWorkingSet(forceUpdate bool) {
     if !forceUpdate {
         // Check non-working workers first
         flag := false
-        for _, w := m.workers {
-            if !worker.working {
+        for _, w := range m.workers {
+            if !w.Working() {
                 flag = true
                 break
             }
@@ -188,10 +197,10 @@ func (m *HonestMinerMaster) updateWorkingSet(forceUpdate bool) {
     st := NewBlockChainTStack(m.BC, true, true)
     defer st.Close()
 
-    validTransactions = make([]*pb.Transaction, 0)
+    validTransactions := make([]*pb.Transaction, 0)
 
     nrProcessed := 0
-    for _, trans := range m.BC.PendingTransaction {
+    for _, trans := range m.BC.PendingTransactions {
         if st.TestAndDo(trans) {
             validTransactions = append(validTransactions, trans)
         }
@@ -216,7 +225,7 @@ func (m *HonestMinerMaster) updateWorkingSet(forceUpdate bool) {
         Nonce: "00000000",
     }
 
-    json, err := bc.jsonMarshaler.MarshalToString(block)
+    json, err := m.jsonMarshaler.MarshalToString(block)
     if err != nil {
         return
     }
@@ -229,7 +238,7 @@ func (m *HonestMinerMaster) updateWorkingSet(forceUpdate bool) {
 
     prefix, suffix := presuf[0], presuf[1]
     for _, w := range m.workers {
-        if !w.working || foceUpdate {
+        if !w.Working() || forceUpdate {
             w.UpdateWorkingBlock(prefix, suffix)
         }
     }

@@ -108,7 +108,10 @@ func (p2pc *P2PClient) remoteRequestAsync(funcname string, req proto.Message,
     done := make(chan bool, nrThreads)
     mapper := func (id int) {
         finished := make(map[int]bool)
+        total := int((nrClients - id) / nrThreads)
+
         for t := 0; t < nrTrials; t++ {
+
             for j := id; j < nrClients; j += nrThreads {
                 if r.AcquiredClose() {
                     break
@@ -121,7 +124,7 @@ func (p2pc *P2PClient) remoteRequestAsync(funcname string, req proto.Message,
                 // TODO:: choose server sequence randomly
                 rc := p2pc.Clients[j]
                 if !rc.IsAlive {
-                    finished[j] := true
+                    finished[j] = true
                     continue
                 }
 
@@ -130,11 +133,11 @@ func (p2pc *P2PClient) remoteRequestAsync(funcname string, req proto.Message,
                     if needResult {
                         result <- res
                     }
-                    finished[j] := true
+                    finished[j] = true
                 }
             }
 
-            if len(unfinished) == 0 {
+            if len(finished) == total {
                 break
             } else {
                 time.Sleep(retryInterval)
