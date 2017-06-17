@@ -18,8 +18,8 @@ type BlockInfo struct {
     Json string
     Block *pb.Block
 
-    //Valid: on the longest branch
-    Valid bool
+    //Valid6: on the longest branch
+    Valid6 bool
 }
 
 type BlockChain struct {
@@ -62,7 +62,7 @@ func NewBlockChain(c *ServerConfig, p2pc *P2PClient) (bc *BlockChain) {
             Json: "{}",
             Block: &pb.Block{BlockID: 0},
             Hash: strings.Repeat("0", 64),
-            Valid: true,
+            Valid6: true,
         },
         Trans2Blocks: make(map[string][]*BlockInfo),
 
@@ -105,7 +105,7 @@ func (bc *BlockChain) PushBlockJson(json string) (lastChanged bool, err error) {
         Json: json,
         Hash: GetHashString(json),
         Block: block,
-        Valid: false,
+        Valid6: false,
     }
 
     return bc.pushBlockInfo(bi, true)
@@ -193,7 +193,7 @@ func (bc *BlockChain) VerifyTransaction6(t *pb.Transaction) (rc int, hash string
 
     if blocks, ok := bc.Trans2Blocks[t.UUID]; ok {
         for _, block := range blocks {
-            if block.Valid && block.Block.BlockID >= bc.LatestBlock.Block.BlockID - 6 {
+            if block.Valid6 && block.Block.BlockID >= bc.LatestBlock.Block.BlockID - 6 {
                 return 2, block.Hash
             }
         }
@@ -233,14 +233,14 @@ func (bc *BlockChain) getHashStringOfBlock(b *pb.Block) (s string, err error) {
 // Private: Execution
 
 func (bc *BlockChain) doBlock(x *BlockInfo) {
-    x.Valid = true
+    x.Valid6 = true
     for _, trans := range x.Block.Transactions {
         bc.doTransaction(trans)
     }
 }
 
 func (bc *BlockChain) undoBlock(x *BlockInfo) {
-    x.Valid = false
+    x.Valid6 = false
     s := x.Block.Transactions
     for i := len(s) - 1; i >= 0; i-- {
         bc.undoTransaction(s[i])
@@ -314,7 +314,7 @@ func (bc *BlockChain) switchLatestBlock(x *BlockInfo, y *BlockInfo) (succ bool) 
         return
     }
 
-    // TODO:: delete invalid block
+    // TODO:: delete inValid6 block
     // NOTE(MJY):: Need undo "Trans2Blocks" too.
 
     undos := make([]*BlockInfo, 0)
@@ -328,7 +328,7 @@ func (bc *BlockChain) switchLatestBlock(x *BlockInfo, y *BlockInfo) (succ bool) 
         y = bc.Blocks[y.Block.PrevHash]
     }
 
-    succ = switchLatestBlock_undodo(undos, dos, 0)
+    succ = switchLatestBlock_undodo(undos, dos)
     if !succ {
         return
     }
@@ -351,24 +351,50 @@ func (bc *BlockChain) findBlockLCA(x *BlockInfo, y *BlockInfo) (z *BlockInfo) {
 func (bc *BlockChain) switchLatestBlock_complete(bi *BlockInfo) (succ bool) {
     // complete the sub-blockchain
     // TODO(IMPORTANT)::
+    return true
 }
 
 func (bc *BlockChain) switchLatestBlock_undodo(undos []*BlockInfo, dos []*BlockInfo, cur int) (succ bool) {
-    // recursively undo and do.
-    // once fail, rollback
+    // Undo and do; once fail, rollback.
     // TODO(IMPORTANT)::
+    for _, bi := range undos {
+        bc.undoBlock(bi)
+    }
+
+    succ := true
+    for i := len(dos) - 1; i >= 0; i-- {
+        bi := dos[i]
+
+        if err := verifyBlockTransaction(bi); err == nil {
+            bc.Do(bi)
+        } else {
+            for j := i + 1; j < len(dos); j++ {
+                bc.Undo(dos[j])
+            }
+            succ = false
+            break
+        }
+    }
+
+    if !succ {
+        for i := len(undos) - 1; i >= 0; i-- {
+            bc.doBlock(undos[i])
+        }
+    }
+
+    return succ
 }
 
 // Private: Block verifications
 
 func (bc *BlockChain) verifyBlockInfo(bi *BlockInfo) (err error) {
     if !CheckHash(bi.Hash) {
-        return fmt.Errorf("Verify block failed, invalid hash: %s.", bi.Hash)
+        return fmt.Errorf("Verify block failed, inValid6 hash: %s.", bi.Hash)
     }
 
     // Check hex
     if !CheckNonce(bi.Block.Nonce) {
-        return fmt.Errorf("Verify block failed, invalid nonce: %s.", bi.Block.Nonce)
+        return fmt.Errorf("Verify block failed, inValid6 nonce: %s.", bi.Block.Nonce)
     }
 
     // Check basic transaction info
@@ -397,11 +423,11 @@ func (bc *BlockChain) verifyBlockTransaction(bi *BlockInfo) (err error) {
         }
     }
 
-    // Check validity
+    // Check Valid6ity
     stack := NewBlockChainTStack(bc, false)
     for _, t := range b.Transactions {
         if !stack.TestAndDo(t) {
-            return fmt.Errorf("Verify block failed, transaction amount invalid: %s.", t.UUID)
+            return fmt.Errorf("Verify block failed, transaction amount inValid6: %s.", t.UUID)
         }
     }
 
@@ -443,7 +469,7 @@ func (bc *BlockChain) verifyTransactionRepeat(t *pb.Transaction) (err error) {
 
     if blocks, ok := bc.Trans2Blocks[t.UUID]; ok {
         for _, block := range blocks {
-            if block.Valid {
+            if block.Valid6 {
                 return fmt.Errorf("Verify block failed, transaction exists: %s.", t.UUID)
             }
         }
