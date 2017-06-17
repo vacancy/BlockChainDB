@@ -42,11 +42,11 @@ func (st *BlockChainTStack) Close() {
 }
 
 func (st *BlockChainTStack) Undo(t *pb.Transaction) {
-    _ := st.undoTransaction(t)
+    _ = st.undoTransaction(t)
 }
 
 func (st *BlockChainTStack) UndoBlock(bi *BlockInfo) {
-    s := x.Block.Transactions
+    s := bi.Block.Transactions
     for i := len(s) - 1; i >= 0; i-- {
         st.Undo(s[i])
     }
@@ -61,7 +61,7 @@ func (st *BlockChainTStack) TestAndDo(t *pb.Transaction) (succ bool) {
 }
 
 func (st *BlockChainTStack) TestAndDoBlock(bi *BlockInfo) (succ bool) {
-    for _, trans := range x.Block.Transactions {
+    for _, trans := range bi.Block.Transactions {
         if ok := st.TestAndDo(trans); !ok {
             return false
         }
@@ -109,7 +109,7 @@ func (st *BlockChainTStack) undoTransaction(t *pb.Transaction) (err error) {
     fromMoney := st.getMoney(t.FromID)
     toMoney := st.getMoney(t.ToID)
 
-    UserMoney[t.FromID] = fromMoney + t.Value
-    UserMoney[t.ToID] = toMoney - (t.Value - t.MiningFee)
+    st.UserMoney[t.FromID] = fromMoney + t.Value
+    st.UserMoney[t.ToID] = toMoney - (t.Value - t.MiningFee)
     return nil
 }
