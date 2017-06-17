@@ -76,7 +76,7 @@ func NewBlockChain(c *ServerConfig, p2pc *P2PClient) (bc *BlockChain) {
         UserMutex: &sync.RWMutex{},
         TransactionMutex: &sync.RWMutex{},
 
-        defaultUserInfo: &UserInfo{Money: bc.config.Common.DefaultMoney},
+        defaultUserInfo: &UserInfo{Money: c.Common.DefaultMoney},
     }
 }
 
@@ -152,7 +152,7 @@ func (bc *BlockChain) PushTransaction(t *pb.Transaction, needVerifyInfo bool) (r
     defer bc.BlockMutex.RUnlock()
 
     bc.TransactionMutex.RLock()
-    defer bc.BlockMutex.RUnlock()
+    defer bc.TransactionMutex.RUnlock()
 
     if err := bc.verifyTransactionUUID(t); err != nil {
         return 0
