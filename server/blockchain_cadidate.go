@@ -1,7 +1,6 @@
 package main
 
 import (
-    "sync"
     pb "../protobuf/go"
 )
 
@@ -18,7 +17,7 @@ func NewBlockChainTStack(bc *BlockChain, needLock bool) *BlockChainTStack {
     st := &BlockChainTStack{
         Stack: make([]*pb.Transaction, 0),
         BC: bc,
-        needLock: needLock
+        needLock: needLock,
     }
 
     if needLock {
@@ -41,7 +40,7 @@ func (st *BlockChainTStack) TestAndDo(t *pb.Transaction) (succ bool) {
 
 func (st *BlockChainTStack) getMoney(uid string) (money int32) {
     if money, ok := st.UserMoney[uid]; ok {
-        return
+        return money
     }
     return st.BC.GetUserInfoWithDefault(uid).Money
 }
@@ -55,8 +54,8 @@ func (st *BlockChainTStack) doTransaction(t *pb.Transaction) (err error){
     fromMoney := st.getMoney(t.FromID)
     toMoney := st.getMoney(t.ToID)
 
-    UserMoney[t.FromID] := fromMoney - t.Value
-    UserMoney[t.ToID] := toMoney + (t.Value - t.MiningFee)
+    UserMoney[t.FromID] = fromMoney - t.Value
+    UserMoney[t.ToID] = toMoney + (t.Value - t.MiningFee)
     return nil
 }
 
