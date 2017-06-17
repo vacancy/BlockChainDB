@@ -49,7 +49,6 @@ func (s *Server) GetBlock(ctx context.Context, in *pb.GetBlockRequest) (*pb.Json
     return &pb.JsonBlockString{Json: bi.Json}, nil
 }
 func (s *Server) PushBlock(ctx context.Context, in *pb.JsonBlockString) (*pb.Null, error) {
-    log.Printf("On server.PushBlock %s.", in.Json)
     s.Master.OnBlockAsync(in.Json)
     return &pb.Null{}, nil
 }

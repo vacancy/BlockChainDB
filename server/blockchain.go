@@ -2,6 +2,7 @@ package main
 
 import (
     "sync"
+    "log"
     "fmt"
     "strings"
 
@@ -120,6 +121,8 @@ func (bc *BlockChain) pushBlockJsonInternal(json string, needVerifyInfo bool) (l
         Block: block,
         Valid6: false,
     }
+
+    log.Printf("Push block internal: Json=%s, Hash=%s", json, bi.Hash)
 
     lastChanged = false
 

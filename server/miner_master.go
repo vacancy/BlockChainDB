@@ -154,7 +154,6 @@ func (m *HonestMinerMaster) OnBlockAsync(json string) {
 }
 
 func (m *HonestMinerMaster) OnWorkerSuccess(json string) {
-    log.Printf("On worker success: %s.", json)
     _, err := m.BC.DeclareBlockJson(json)
     if err == nil {
         _ = m.P2PC.RemotePushBlockAsync(json)
