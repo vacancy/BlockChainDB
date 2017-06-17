@@ -99,7 +99,11 @@ func (bc *BlockChain) GetLatestBlock() (bi *BlockInfo) {
 
 func (bc *BlockChain) PushBlockJson(json string) (lastChanged bool, err error) {
     block := &pb.Block{}
-    jsonpb.UnmarshalString(json, block)
+    err = jsonpb.UnmarshalString(json, block)
+
+    if err != nil {
+        return false, err
+    }
 
     bi := &BlockInfo{
         Json: json,
@@ -200,7 +204,7 @@ func (bc *BlockChain) VerifyTransaction6(t *pb.Transaction) (rc int, hash string
         return 1, blocks[0].Hash
     }
 
-    // TODO:: what about the transactions in pending queue
+    // TODO:: what about the transactions in PendingTransactions
     // TODO(IMPORTANT)::
 
     return 0, "?"
@@ -267,6 +271,7 @@ func (bc *BlockChain) undoTransaction(t *pb.Transaction) (err error) {
 
 func (bc *BlockChain) addBlock(bi *BlockInfo) {
     // Add a verified (info only, no transactions) into the database
+    // Require BlockMutex
 
     bc.Blocks[bi.Hash] = bi
     for _, trans := range bi.Blocks.Transactions {
@@ -350,13 +355,55 @@ func (bc *BlockChain) findBlockLCA(x *BlockInfo, y *BlockInfo) (z *BlockInfo) {
 
 func (bc *BlockChain) switchLatestBlock_complete(bi *BlockInfo) (succ bool) {
     // complete the sub-blockchain
-    // TODO(IMPORTANT)::
+    // Require BlockMutex
+
+    for {
+        prev := bi.Block.PrevHash
+        if _, ok := bc.Blocks[prev]; ok {
+            break
+        }
+
+        response := bc.p2pc.RemoveGetBlock(prev)
+        for {
+            msg := response.Get()
+            if msg == nil {
+                return false
+            }
+
+            json := (msg.(*pb.JsonBlockString)).Json
+            block := &pb.Block{}
+            err := jsonpb.UnmarshalString(json, block)
+
+            if err != nil {
+                continue
+            }
+
+            newBi := &BlockInfo{
+                Json: json,
+                Hash: GetHashString(json),
+                Block: block,
+                Valid6: false,
+            }
+
+            if prev != newBi.Hash {
+                continue
+            }
+
+            if bc.verifyBlockInfo(newBi) {
+                bc.Blocks[prev] = newBi
+                response.AcquireClose()
+                break
+            }
+        }
+
+        bi := bc.Blocks[prev]
+    }
+
     return true
 }
 
 func (bc *BlockChain) switchLatestBlock_undodo(undos []*BlockInfo, dos []*BlockInfo, cur int) (succ bool) {
     // Undo and do; once fail, rollback.
-    // TODO(IMPORTANT)::
     for _, bi := range undos {
         bc.undoBlock(bi)
     }
