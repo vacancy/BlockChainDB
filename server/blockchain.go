@@ -305,6 +305,10 @@ func (bc *BlockChain) refreshBlockChain(bi *BlockInfo) (latestChanged bool, err 
     } else {
         latestChanged = bc.switchLatestBlock(bc.LatestBlock, bi)
     }
+
+    if latestChanged {
+        log.Printf("!! LatestBlock changed to: %s\n", bc.LatestBlock.Hash)
+    }
     return
 }
 
@@ -317,7 +321,8 @@ func (bc *BlockChain) extendLatestBlock(bi *BlockInfo) (succ bool) {
     return false
 }
 
-func (bc *BlockChain) switchLatestBlock(x *BlockInfo, y *BlockInfo) (succ bool) {
+func (bc *BlockChain) switchLatestBlock(source *BlockInfo, target *BlockInfo) (succ bool) {
+    x, y := source, target
     z := bc.findBlockLCA(x, y)
 
     succ = bc.switchLatestBlock_complete(y)
@@ -344,7 +349,7 @@ func (bc *BlockChain) switchLatestBlock(x *BlockInfo, y *BlockInfo) (succ bool) 
         return
     }
 
-    bc.LatestBlock = y
+    bc.LatestBlock = target
     return true
 }
 
