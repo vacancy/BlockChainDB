@@ -15,6 +15,7 @@ type SimpleMinerWorker struct {
     suffix string
     change chan bool
     mutex *sync.Mutex
+    working bool
 }
 
 func NewSimpleMinerWorker(m MinerMaster) (w *SimpleMinerWorker) {
@@ -37,14 +38,14 @@ func (w *SimpleMinerWorker) UpdateWorkingBlock(string prefix, string suffix) {
 }
 
 func (w *SimpleMinerWorker) Mainloop() {
-    var working = false
+    w,working = false
     var prefix string
     var suffix string
     var next int64 = 0
 
     for {
         var changed: false
-        if !working {
+        if !w.working {
             changed = <-w.changed
         } else {
             select {
@@ -56,7 +57,7 @@ func (w *SimpleMinerWorker) Mainloop() {
         }
 
         if changed {
-            working = true
+            w.working = true
 
             w.mutex.Lock()
             prefix = prefix
@@ -75,7 +76,7 @@ func (w *SimpleMinerWorker) Mainloop() {
 
             if succ {
                 m.OnWorkerSuccess(str)
-                working = false
+                w.working = false
             }
 
             next += 1

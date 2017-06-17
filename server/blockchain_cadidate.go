@@ -10,17 +10,22 @@ type BlockChainTStack struct {
     BC *BlockChain
     UserMoney map[string]int32
 
+    verifyRepeat bool
     needLock bool
 }
 
-func NewBlockChainTStack(bc *BlockChain, needLock bool) *BlockChainTStack {
+func NewBlockChainTStack(bc *BlockChain, verifyRepeat bool, needLock bool) *BlockChainTStack {
     st := &BlockChainTStack{
         Stack: make([]*pb.Transaction, 0),
         BC: bc,
+        verifyRepeat: verifyRepeat,
         needLock: needLock,
     }
 
     if needLock {
+        if verifyRepeat {
+            st.BC.BlockMutex.RLock()
+        }
         st.BC.UserMutex.RLock()
     }
 }
@@ -28,6 +33,9 @@ func NewBlockChainTStack(bc *BlockChain, needLock bool) *BlockChainTStack {
 func (st *BlockChainTStack) Close() {
     if st.needLock {
         st.BC.UserMutex.RUnlock()
+        if st.verifyRepeat {
+            st.BC.BlockMutex.RUnlock()
+        }
     }
 }
 
@@ -68,7 +76,22 @@ func (st *BlockChainTStack) getMoney(uid string) (money int32) {
 
 func (st *BlockChainTStack) verifyTransaction(t *pb.Transaction) (ok bool) {
     balance := st.getMoney(t.FromID)
-    return balance >= t.Value
+
+    if balance < t.Value {
+        return false
+    }
+
+    if st.verifyRepeat {
+        if blocks, ok := st.BC.Trans2Blocks[t.UUID]; ok {
+            for _, block := range blocks {
+                if block.Valid6 {
+                    return false
+                }
+            }
+        }
+    }
+
+    return true
 }
 
 func (st *BlockChainTStack) doTransaction(t *pb.Transaction) (err error){

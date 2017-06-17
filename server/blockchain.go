@@ -51,7 +51,6 @@ type BlockChain struct {
     UserMutex         *sync.RWMutex
     TransactionMutex  *sync.RWMutex
 
-    jsonMarshaler     *jsonpb.Marshaler
     defaultUserInfo   *UserInfo
 }
 
@@ -77,7 +76,6 @@ func NewBlockChain(c *ServerConfig, p2pc *P2PClient) (bc *BlockChain) {
         UserMutex: &sync.RWMutex{},
         TransactionMutex: &sync.RWMutex{},
 
-        jsonMarshaler: &jsonpb.Marshaler{EnumsAsInts: false},
         defaultUserInfo: &UserInfo{Money: bc.config.Common.DefaultMoney},
     }
 }
@@ -98,6 +96,14 @@ func (bc *BlockChain) GetLatestBlock() (bi *BlockInfo) {
 }
 
 func (bc *BlockChain) PushBlockJson(json string) (lastChanged bool, err error) {
+    return bc.pushBlockJsonInternal(json, true)
+}
+
+func (bc *BlockChain) DeclareBlockJson(json string) (lastChanged bool, err error) {
+    return bc.pushBlockJsonInternal(json, false)
+}
+
+func (bc *BlockChain) pushBlockJsonInternal(json string, needVerifyInfo bool) (lastChanged bool, err error) {
     block := &pb.Block{}
     err = jsonpb.UnmarshalString(json, block)
 
@@ -112,14 +118,6 @@ func (bc *BlockChain) PushBlockJson(json string) (lastChanged bool, err error) {
         Valid6: false,
     }
 
-    return bc.pushBlockInfo(bi, true)
-}
-
-func (bc *BlockChain) DeclareBlockInfo(bi *BlockInfo) (lastChanged bool, err error) {
-    return bc.pushBlockInfo(bi, false)
-}
-
-func (bc *BlockChain) pushBlockInfo(bi *BlockInfo, needVerifyInfo bool) (lastChanged bool, err error) {
     lastChanged = false
 
     // Return nil when succeed.
@@ -207,6 +205,9 @@ func (bc *BlockChain) VerifyTransaction6(t *pb.Transaction) (rc int, hash string
     // TODO:: what about the transactions in PendingTransactions
     // TODO(IMPORTANT)::
 
+    // TODO:: implement checking of side-chain
+    // TODO(FUCK)::
+
     return 0, "?"
 }
 
@@ -220,18 +221,6 @@ func (bc *BlockChain) GetUserInfoWithDefault(uid string) (u *UserInfo) {
         return bc.defaultUserInfo
    }
    return u
-}
-
-// Private: Hash
-
-func (bc *BlockChain) getHashStringOfBlock(b *pb.Block) (s string, err error) {
-    jsonString, err := bc.jsonMarshaler.MarshalToString(b)
-    if err != nil {
-        return
-    }
-
-    s = GetHashString(jsonString)
-    return
 }
 
 // Private: Execution
@@ -471,12 +460,13 @@ func (bc *BlockChain) verifyBlockTransaction(bi *BlockInfo) (err error) {
     }
 
     // Check Valid6ity
-    stack := NewBlockChainTStack(bc, false)
+    stack := NewBlockChainTStack(bc, false, false)
     for _, t := range b.Transactions {
         if !stack.TestAndDo(t) {
             return fmt.Errorf("Verify block failed, transaction amount inValid6: %s.", t.UUID)
         }
     }
+    stack.Close()
 
     return nil
 }
@@ -485,6 +475,10 @@ func (bc *BlockChain) verifyBlockTransaction(bi *BlockInfo) (err error) {
 
 func (bc *BlockChain) verifyTransactionInfo(t *pb.Transaction) (err error) {
     // Return nil when succeed.
+
+    // TODO:: check len(userid) == 8
+    // TODO:: check from != to
+
     if t.Type != pb.Transaction_TRANSFER {
         return fmt.Errorf("Verify transaction failed, unsupported type: %s.", t.Type)
     }
@@ -505,6 +499,7 @@ func (bc *BlockChain) verifyTransactionUUID(t *Pb.Transaction) (err error) {
     // Verify whether there is some transaction with same UUID but different value.
     // Return nil when succeed.
     // Require: BlockMutex.R, TransactionMutex.R
+    // TODO:: FUCKKKKKK
 
     return nil
 }
