@@ -18,6 +18,7 @@ func NewBlockChainTStack(bc *BlockChain, verifyRepeat bool, needLock bool) *Bloc
     st := &BlockChainTStack{
         Stack: make([]*pb.Transaction, 0),
         BC: bc,
+        UserMoney: make(map[string]int32),
         verifyRepeat: verifyRepeat,
         needLock: needLock,
     }

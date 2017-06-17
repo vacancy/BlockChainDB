@@ -2,6 +2,7 @@ package main
 
 import (
     "fmt"
+    "log"
     "sync"
 )
 
@@ -52,7 +53,9 @@ func (w *SimpleMinerWorker) Mainloop() {
     for {
         changed := false
         if !w.working {
+            log.Printf("[Worker] Wating for working set.")
             changed = <-w.change
+            log.Printf("[Worker] Got working set.")
         } else {
             select {
             case _ = <-w.change:
@@ -67,15 +70,18 @@ func (w *SimpleMinerWorker) Mainloop() {
 
             w.mutex.Lock()
 
+            log.Printf("[Worker] Clean the channel.")
             // Remove all messages from the chan
-            for {
-                select {
-                case _ = <-w.change:
-                    // pass
-                default:
-                    break
+            (func() {
+                for {
+                    select {
+                    case _ = <-w.change:
+                        // pass
+                    default:
+                        return
+                    }
                 }
-            }
+            })()
 
             prefix = prefix
             suffix = suffix
@@ -84,19 +90,23 @@ func (w *SimpleMinerWorker) Mainloop() {
             next = 0
         }
 
-        for i := 0; i <= 100; i++ {
-            nonce := fmt.Sprintf("%08x", next)
+        if w.working {
+            for i := 0; i <= 100; i++ {
+                nonce := fmt.Sprintf("%08x", next)
 
-            str := prefix + nonce + suffix
-            hash := GetHashString(str)
-            succ := CheckHash(hash)
+                str := prefix + nonce + suffix
+                hash := GetHashString(str)
+                succ := CheckHash(hash)
 
-            if succ {
-                w.master.OnWorkerSuccess(str)
-                w.working = false
+                if succ {
+                    w.working = false
+                    w.master.OnWorkerSuccess(str)
+                    break
+                }
+
+                next += 1
             }
-
-            next += 1
+            log.Printf("[Worker] Working on: %d.", next)
         }
     }
 }

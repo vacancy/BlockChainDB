@@ -154,10 +154,13 @@ func (m *HonestMinerMaster) OnBlockAsync(json string) {
 }
 
 func (m *HonestMinerMaster) OnWorkerSuccess(json string) {
+    log.Printf("On worker success: %s.", json)
     _, err := m.BC.DeclareBlockJson(json)
     if err != nil {
         _ = m.P2PC.RemotePushBlockAsync(json)
         m.updateWorkingSet(true)
+    } else {
+        log.Printf("Got invalid declaration: %s.", json)
     }
 }
 
@@ -201,6 +204,7 @@ func (m *HonestMinerMaster) updateWorkingSet(forceUpdate bool) {
 
     nrProcessed := 0
     for _, trans := range m.BC.PendingTransactions {
+
         if st.TestAndDo(trans) {
             validTransactions = append(validTransactions, trans)
         }
@@ -236,7 +240,11 @@ func (m *HonestMinerMaster) updateWorkingSet(forceUpdate bool) {
         return
     }
 
+    log.Printf("Updating working set: %s.", json)
+
     prefix, suffix := presuf[0], presuf[1]
+    prefix = prefix + "\"Nonce\":\""
+    suffix = "\"" + suffix
     for _, w := range m.workers {
         if !w.Working() || forceUpdate {
             w.UpdateWorkingBlock(prefix, suffix)
