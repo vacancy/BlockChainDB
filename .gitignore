@@ -17,6 +17,7 @@
 .*.swp
 
 # Built executable
+/examples/test_client
 /server/main
 /term/*.out
 /term/*.err

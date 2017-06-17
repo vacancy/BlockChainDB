@@ -80,7 +80,7 @@ func NewBlockChain(c *ServerConfig, p2pc *P2PClient) (bc *BlockChain) {
         defaultUserInfo: &UserInfo{Money: c.Common.DefaultMoney},
     }
 
-    bc.Blocks[strings.Repeat("0", 64)] = bc.LatestBlock
+    bc.Blocks[bc.LatestBlock.Hash] = bc.LatestBlock
     return
 }
 
@@ -122,7 +122,7 @@ func (bc *BlockChain) pushBlockJsonInternal(json string, needVerifyInfo bool) (l
         Valid6: false,
     }
 
-    log.Printf("Push block internal: Json=%s, Hash=%s", json, bi.Hash)
+    log.Printf("Push block internal: Json=%s, Hash=%s.", json, bi.Hash)
 
     lastChanged = false
 
@@ -459,6 +459,8 @@ func (bc *BlockChain) verifyBlockInfo(bi *BlockInfo) (err error) {
     if !CheckNonce(bi.Block.Nonce) {
         return fmt.Errorf("Verify block failed, inValid6 nonce: %s.", bi.Block.Nonce)
     }
+
+    // TODO:: Check minerid, etc.
 
     // Check basic transaction info
     for _, t := range bi.Block.Transactions {
