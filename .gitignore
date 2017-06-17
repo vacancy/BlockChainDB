@@ -18,3 +18,7 @@
 
 # Built executable
 /server/main
+/term/*.out
+/term/*.err
+/term/pid
+
