@@ -17,6 +17,8 @@ type BlockInfo struct {
     Hash string
     Json string
     Block *pb.Block
+    //Valid: on the longest branch
+    Valid bool
 }
 
 type BlockChain struct {
@@ -36,9 +38,6 @@ type BlockChain struct {
     // OnAddActiveCallbacks []func (string)
     // OnRemoveActiveCallbacks []func (string)
 
-    // NOTE:: Owned by blocksMutex
-    isBlockOnLongest map[string]bool
-
     config            *ServerConfig
     p2pc              *P2PClient
 
@@ -56,12 +55,11 @@ func NewBlockChain(c *ServerConfig, p2pc *P2PClient) (bc *BlockChain) {
             Json: "{}",
             Block: &pb.Block{BlockID: 0},
             Hash: strings.Repeat("0", 64),
+            Valid: true,
         },
         Trans2Blocks: make(map[string][]*BlockInfo),
 
         Users: make(map[string]*UserInfo),
-
-        isBlockOnLongest: make(map[string]bool),
 
         config: c,
         p2pc: p2pc,
@@ -101,6 +99,7 @@ func (bc *BlockChain) PushBlockJson(json string) (lastChanged bool, err error) {
         Json: json,
         Hash: GetHashString(json),
         Block: block,
+        Valid: false,
     }
 
     return bc.pushBlockInfo(bi, true, false)
@@ -119,23 +118,27 @@ func (bc *BlockChain) VerifyTransaction(t *pb.Transaction) {
 
 func (bc *BlockChain) VerifyTransaction6(t *pb.Transaction) (rc int, hash string) {
     // Return return code and hash
-    // Return code: 0=fail; 1=peding; 2=succeed..
+    // Return code: 0=fail; 1=peding; 2=succeed.
 
     bc.blocksMutex.RLock()
     defer bc.blocksMutex.RUnlock()
 
     if blocks, ok := bc.Trans2Blocks[t.UUID]; ok {
         for _, block := range blocks {
-            if bc.isBlockOnLongest[block.Hash] {
-                // TODO::
-                if true {
-                    return 2, block.Hash
-                } else {
-                    return 1, block.Hash
-                }
+            if block.Valid && block.Block.BlockID >= bc.Latest.Block.BlockID - 6 {
+                return 2, block.Hash
             }
         }
+        return 1, blocks[0].Hash
     }
+
+    // bc.usersMutex.RLock()
+    // defer bc.usersMutex.RUnlock()
+    // if _, ok := bc.Transactions[t.UUID]; ok {
+    //     if bc.Users[t.FromID].Money >= t.Value {
+    //         return 1, "!"
+    //     }
+    // }
 
     return 0, "?"
 }
@@ -177,6 +180,16 @@ func (bc *BlockChain) refreshBlockChain(bi *BlockInfo, prioritySelectAsLatest bo
     bc.usersMutex.Lock()
     defer bc.usersMutex.Unlock()
     // TODO::
+    b := bi.Block
+    for _, trans := b.Transactions {
+        blocks := bc.TransBlocks[trans.UUID]
+        if blocks == nil {
+            blocks := []
+        } else {
+            blocks = append(blocks, b)
+        }
+        bc.TransBlocks[trans.UUID] = blocks
+    }
     return true, nil
 }
 
