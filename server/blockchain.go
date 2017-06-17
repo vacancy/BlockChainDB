@@ -122,8 +122,6 @@ func (bc *BlockChain) pushBlockJsonInternal(json string, needVerifyInfo bool) (l
         Valid6: false,
     }
 
-    log.Printf("On bc.pushBlockJsonInternal %s\n", json)
-
     lastChanged = false
 
     // Return nil when succeed.
@@ -225,9 +223,7 @@ func (bc *BlockChain) SetDefaultUserInfo(uid string) (u *UserInfo) {
 }
 
 func (bc *BlockChain) GetUserInfo(uid string) (u *UserInfo) {
-    log.Printf("getUserInfo.UserMutex.RLock()")
     bc.UserMutex.RLock()
-    log.Printf("getUserInfo.UserMutex.RLock() succ")
     defer bc.UserMutex.RUnlock()
 
     return bc.GetUserInfoAtomic(uid)

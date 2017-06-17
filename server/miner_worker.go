@@ -53,9 +53,7 @@ func (w *SimpleMinerWorker) Mainloop() {
     for {
         changed := false
         if !w.working {
-            log.Printf("[Worker] Wating for working set.")
             changed = <-w.change
-            log.Printf("[Worker] Got working set.")
         } else {
             select {
             case _ = <-w.change:
@@ -70,7 +68,6 @@ func (w *SimpleMinerWorker) Mainloop() {
 
             w.mutex.Lock()
 
-            log.Printf("[Worker] Clean the channel.")
             // Remove all messages from the chan
             (func() {
                 for {
@@ -106,8 +103,6 @@ func (w *SimpleMinerWorker) Mainloop() {
 
                 next += 1
             }
-            log.Printf("[Worker] Working on: %d.", next)
         }
     }
 }
-
