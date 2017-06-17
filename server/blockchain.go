@@ -111,6 +111,12 @@ func (bc *BlockChain) DeclareBlockInfo(bi *BlockInfo) (lastChanged bool, err err
     return bc.pushBlockInfo(bi, false, true)
 }
 
+func (bc *BlockChain) VerifyTransaction(t *pb.Transaction) {
+    // Verify transaction based on current info
+    usersMutex.RLock()
+    defer usersMutex.RUnlock()
+}
+
 func (bc *BlockChain) VerifyTransaction6(t *pb.Transaction) (rc int, hash string) {
     // Return return code and hash
     // Return code: 0=fail; 1=peding; 2=succeed..
