@@ -67,17 +67,20 @@ func NewBlockChain(c *ServerConfig, p2pc *P2PClient) (bc *BlockChain) {
 
         Users: make(map[string]*UserInfo),
 
+        PendingTransactions: make(map[string]*pb.Transaction),
+
         config: c,
         p2pc: p2pc,
 
         BlockMutex: &sync.RWMutex{},
         UserMutex: &sync.RWMutex{},
+        TransactionMutex: &sync.RWMutex{},
 
         jsonMarshaler: &jsonpb.Marshaler{EnumsAsInts: false},
         defaultUserInfo: &UserInfo{Money: bc.config.Common.DefaultMoney},
 
         // OnChangeLatestCallbacks: make([]func (), 0)
-        // OnAddActiveCallbacks: make([]func (string), 0)
+                    // OnAddActiveCallbacks: make([]func (string), 0)
         // OnRemoveActiveCallbacks: make([]func (string), 0)
     }
 }
@@ -108,19 +111,21 @@ func (bc *BlockChain) PushBlockJson(json string) (lastChanged bool, err error) {
         Valid: false,
     }
 
-    return bc.pushBlockInfo(bi, true, false)
+    return bc.pushBlockInfo(bi, true)
 }
-
+            
 
 func (bc *BlockChain) DeclareBlockInfo(bi *BlockInfo) (lastChanged bool, err error) {
-    return bc.pushBlockInfo(bi, false, true)
+    return bc.pushBlockInfo(bi, false)
 }
 
-func (bc *BlockChain) pushBlockInfo(bi *BlockInfo, needVerify bool, prioritySelectAsLatest bool) (lastChanged bool, err error) {
+func (bc *BlockChain) pushBlockInfo(bi *BlockInfo, needVerify bool) (lastChanged bool, err error) {
     lastChanged = false
 
     bc.BlockMutex.Lock()
     defer bc.BlockMutex.Unlock()
+    bc.UserMutex.Lock()
+    defer bc.UserMutex.Unlock()
 
     // Return nil when succeed.
     if (needVerify) {
@@ -130,35 +135,42 @@ func (bc *BlockChain) pushBlockInfo(bi *BlockInfo, needVerify bool, prioritySele
         }
     }
 
-    bc.UserMutex.Lock()
-    defer bc.UserMutex.Unlock()
     bc.TransactionMutex.Lock()
     defer bc.TransactionMutex.Unlock()
 
-    return bc.refreshBlockChain(bi, prioritySelectAsLatest)
+    return bc.refreshBlockChain(bi)
 }
 
 func (bc *BlockChain) PushTransaction(t *pb.Transaction, needVerify bool) (rc int) {
     // Verify transaction based on current info
     // RC: 0=fail, 1=ok, 2=already-in-block
 
-    // always acquire block mutex first
-    // TODO:: check if the t == getTByUUID(t.UUID)
-    bc.blockMutex.RLock()
-    defer bc.blockMutex.RUnlock()
-
-    if blocks, ok := bc.Trans2Blocks[t.UUID]; ok {
-        if ok {
-            return 2
+    if (needVerify) {
+        err := bc.verifyTransactionInfo(t)
+        if (err != nil) {
+            return 0
         }
+    }
+
+    // always acquire block mutex first
+               // TODO:: check if the t == getTByUUID(t.UUID)
+    bc.BlockMutex.RLock()
+    defer bc.BlockMutex.RUnlock()
+
+    if _, ok := bc.Trans2Blocks[t.UUID]; ok {
+        return 2
     }
 
     bc.UserMutex.RLock()
     defer bc.UserMutex.RUnlock()
+
     err := bc.verifyTransactionMoney(t)
+    if (err != nil) {
+        return 0
+    }
 
     // TODO::
-
+    bc.PendingTransactions[t.UUID] = t
     return 1
 }
 
@@ -172,7 +184,7 @@ func (bc *BlockChain) VerifyTransaction6(t *pb.Transaction) (rc int, hash string
     // TODO:: check if the t == getTByUUID(t.UUID)
     if blocks, ok := bc.Trans2Blocks[t.UUID]; ok {
         for _, block := range blocks {
-            if block.Valid && block.Block.BlockID >= bc.Latest.Block.BlockID - 6 {
+            if block.Valid && block.Block.BlockID >= bc.LatestBlock.Block.BlockID - 6 {
                 return 2, block.Hash
             }
         }
@@ -208,23 +220,77 @@ func (bc *BlockChain) getHashStringOfBlock(b *pb.Block) (s string, err error) {
 
 // Private: Block
 
-func (bc *BlockChain) refreshBlockChain(bi *BlockInfo, prioritySelectAsLatest bool) (latestChanged bool, err error) {
+func (bc *BlockChain) refreshBlockChain(bi *BlockInfo) (latestChanged bool, err error) {
     bc.Blocks[bi.Hash] = bi
-    bc.LatestBlock = bi
 
     // Handle chain switch and go through the transactions in `b`
     // TODO::
     b := bi.Block
-    for _, trans := b.Transactions {
-        blocks := bc.TransBlocks[trans.UUID]
+    for _, trans := range b.Transactions {
+        blocks := bc.Trans2Blocks[trans.UUID]
         if blocks == nil {
-            blocks := []
-        } else {
-            blocks = append(blocks, b)
+            blocks = make([]*BlockInfo, 0)
         }
-        bc.TransBlocks[trans.UUID] = blocks
+        blocks = append(blocks, bi)
+        bc.Trans2Blocks[trans.UUID] = blocks
     }
-    return true, nil
+
+    height := bc.LatestBlock.Block.BlockID
+    latestChanged = b.BlockID > height || b.BlockID == height && bi.Hash < bc.LatestBlock.Hash
+    if !latestChanged {
+        return
+    }
+
+    if b.BlockID == height + 1 && b.PrevHash == bc.LatestBlock.Hash {
+        // Extend, speed up
+        bc.doBlock(bi)
+    } else {
+        bc.resetLatestBlock(bc.LatestBlock, bi)
+    }
+    bc.LatestBlock = bi
+    return 
+}
+
+func (bc *BlockChain) doBlock(x *BlockInfo) {
+    x.Valid = true
+    for _, trans := range x.Block.Transactions {
+        bc.doTransaction(trans)
+    }
+}
+
+func (bc *BlockChain) undoBlock(x *BlockInfo) {
+    x.Valid = false
+    s := x.Block.Transactions
+    for i := len(s) - 1; i >= 0; i -- {
+        bc.undoTransaction(s[i])
+    }
+}
+
+func (bc *BlockChain) resetLatestBlock(x *BlockInfo, y *BlockInfo) {
+    z := bc.findBlockLCA(x, y)
+    for x != z {
+        bc.undoBlock(x)
+        x = bc.Blocks[x.Block.PrevHash]
+    }
+    a := make([]*BlockInfo, 0)
+    for y != z {
+        a = append(a, y)
+        y = bc.Blocks[y.Block.PrevHash]
+    }
+    for i := len(a) - 1; i >= 0; i -- {
+        bc.doBlock(a[i])
+    }
+}
+
+func (bc *BlockChain) findBlockLCA(x *BlockInfo, y *BlockInfo) (z *BlockInfo) {
+    for x != y {
+        if x.Block.BlockID > y.Block.BlockID {
+            x = bc.Blocks[x.Block.PrevHash]
+        } else {
+            y = bc.Blocks[y.Block.PrevHash]
+        }
+    }
+    return x
 }
 
 func (bc *BlockChain) verifyBlock(bi *BlockInfo) (err error) {
@@ -244,7 +310,7 @@ func (bc *BlockChain) verifyBlock(bi *BlockInfo) (err error) {
 
 func (bc *BlockChain) verifyTransactionInfo(t *pb.Transaction) (err error) {
     // Return nil when succeed.
-    // TODO::
+    // TODO:: done
     if t.Type != pb.Transaction_TRANSFER {
         return fmt.Errorf("Verify transaction failed, unsupported type: %s.", t.Type)
     }
@@ -258,7 +324,6 @@ func (bc *BlockChain) verifyTransactionInfo(t *pb.Transaction) (err error) {
         return fmt.Errorf("Verify transaction failed, insufficient value: %d, mining fee: %d.",
             t.Value, t.MiningFee)
     }
-
     // TODO:: if there is a transaction with same UUID, check it.
 
     return nil
@@ -267,19 +332,26 @@ func (bc *BlockChain) verifyTransactionInfo(t *pb.Transaction) (err error) {
 func (bc *BlockChain) verifyTransactionMoney(t *pb.Transaction) (err error) {
     // Verify whether the transaction can be done (considering user accounts).
     // TODO::
-
-    // if _, ok := bc.Transactions[t.UUID]; ok {
-    //     if bc.Users[t.FromID].Money >= t.Value {
-    //         return 1, "!"
-    //     }
-    // }
+    balance := bc.Users[t.FromID].Money
+    if balance < t.Value {
+        return fmt.Errorf("Verify transaction money failed, insufficient balance: %d, transfer money: %d.",
+                        balance, t.Value)
+    }           
     return nil
 }
 
-func (bc *BlockChain) executeTransaction(t *pb.Transaction) (err error) {
-    // TODO::
+func (bc *BlockChain) doTransaction(t *pb.Transaction) (err error) {
+    // TODO:: done
+    bc.Users[t.FromID].Money -= t.Value
+    bc.Users[t.ToID].Money += t.Value - t.MiningFee
     return nil
+}
 
+func (bc *BlockChain) undoTransaction(t *pb.Transaction) (err error) {
+    // TODO:: done
+    bc.Users[t.FromID].Money += t.Value
+    bc.Users[t.ToID].Money -= t.Value - t.MiningFee
+    return nil
 }
 
 // Private: User
