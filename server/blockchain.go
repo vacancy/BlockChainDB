@@ -153,7 +153,7 @@ func (bc *BlockChain) PushTransaction(t *pb.Transaction, needVerify bool) (rc in
     }
 
     // always acquire block mutex first
-               // TODO:: check if the t == getTByUUID(t.UUID)
+    // TODO:: check if the t == getTByUUID(t.UUID)
     bc.BlockMutex.RLock()
     defer bc.BlockMutex.RUnlock()
 
@@ -169,7 +169,7 @@ func (bc *BlockChain) PushTransaction(t *pb.Transaction, needVerify bool) (rc in
         return 0
     }
 
-    // TODO::
+    // TODO:: done
     bc.PendingTransactions[t.UUID] = t
     return 1
 }
@@ -224,7 +224,7 @@ func (bc *BlockChain) refreshBlockChain(bi *BlockInfo) (latestChanged bool, err 
     bc.Blocks[bi.Hash] = bi
 
     // Handle chain switch and go through the transactions in `b`
-    // TODO::
+    // TODO:: done
     b := bi.Block
     for _, trans := range b.Transactions {
         blocks := bc.Trans2Blocks[trans.UUID]
@@ -267,6 +267,7 @@ func (bc *BlockChain) undoBlock(x *BlockInfo) {
 }
 
 func (bc *BlockChain) resetLatestBlock(x *BlockInfo, y *BlockInfo) {
+    // TODO: delete invalid block
     z := bc.findBlockLCA(x, y)
     for x != z {
         bc.undoBlock(x)
@@ -300,9 +301,29 @@ func (bc *BlockChain) verifyBlock(bi *BlockInfo) (err error) {
     if succ == false {
         return fmt.Errorf("Verify block failed, invalid hash: %s.", bi.Hash)
     }
-    // TODO:: verify other info (incl. transactions).
-    // verifyTransactionInfo(t)
-    // verifyTransactionMoney(t)
+    b := bi.Block
+
+    // check used transaction
+    for _, t := range b.Transactions {
+        if blocks, ok := bc.Trans2Blocks[t.UUID]; ok {
+            for _, block := range blocks {
+                if block.Valid {
+                    return fmt.Errorf("Verify block failed, transaction exists: %s.", t.UUID)
+                }
+            }
+        }
+    }
+
+    // check validity
+    stack := NewBlockChainTStack(bc, false)
+    for _, t := range b.Transactions {
+        if !stack.TestAndDo(t) {
+            return fmt.Errorf("Verify block failed, transaction amount invalid: %s.", t.UUID)
+        }
+    }
+
+    // TODO:: check previous block is indeed a block & recover
+
     return nil
 }
 
@@ -331,7 +352,7 @@ func (bc *BlockChain) verifyTransactionInfo(t *pb.Transaction) (err error) {
 
 func (bc *BlockChain) verifyTransactionMoney(t *pb.Transaction) (err error) {
     // Verify whether the transaction can be done (considering user accounts).
-    // TODO::
+    // TODO:: done
     balance := bc.Users[t.FromID].Money
     if balance < t.Value {
         return fmt.Errorf("Verify transaction money failed, insufficient balance: %d, transfer money: %d.",
@@ -344,6 +365,7 @@ func (bc *BlockChain) doTransaction(t *pb.Transaction) (err error) {
     // TODO:: done
     bc.Users[t.FromID].Money -= t.Value
     bc.Users[t.ToID].Money += t.Value - t.MiningFee
+    delete(bc.PendingTransactions, t.UUID)
     return nil
 }
 
@@ -351,6 +373,7 @@ func (bc *BlockChain) undoTransaction(t *pb.Transaction) (err error) {
     // TODO:: done
     bc.Users[t.FromID].Money += t.Value
     bc.Users[t.ToID].Money -= t.Value - t.MiningFee
+    bc.PendingTransactions[t.UUID] = t
     return nil
 }
 
