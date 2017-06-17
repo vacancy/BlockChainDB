@@ -78,10 +78,6 @@ func (m *BaseMinerMaster) VerifyClientTransaction(t *pb.Transaction) (rc int, ha
     return
 }
 
-func (m *BaseMinerMaster) OnClientTransactionAsync(t *pb.Transaction) bool {
-    return m.processTransaction(t)
-}
-
 type HonestMinerMaster struct {
     BaseMinerMaster
 
@@ -110,16 +106,25 @@ func (m *HonestMinerMaster) Mainloop() {
 }
 
 func (m *HonestMinerMaster) GetBlock(bid string) *BlockInfo {
-    return m.BC.GetBlock(bid)
+    b, ok := m.BC.GetBlock(bid)
+    if !ok {
+        return nil
+    }
+    return b
+}
+
+func (m *HonestMinerMaster) OnClientTransactionAsync(t *pb.Transaction) bool {
+    return m.processTransaction(t)
 }
 
 func (m *HonestMinerMaster) OnTransactionAsync(t *pb.Transaction) {
-    _ = processTransaction(t)
+    _ = m.processTransaction(t)
 }
 
 func (m *HonestMinerMaster) OnBlockAsync(json string) {
     oldLatest := m.BC.GetLatestBlock()
-    err := m.BC.PushBlock(json, true)
+    // TODO:: 
+    _, err := m.BC.PushBlockJson(json)
     if err == nil {
         newLatest := m.BC.GetLatestBlock()
         if oldLatest.Hash != newLatest.Hash {
@@ -131,7 +136,8 @@ func (m *HonestMinerMaster) OnBlockAsync(json string) {
 func (m *HonestMinerMaster) processTransaction(t *pb.Transaction) bool {
     // TODO:: Flow control
 
-    err := m.BC.PushTransaction(t, true)
+    // err := m.BC.PushTransaction(t, true)
+    var err error = nil
     if err != nil {
         return false
     }
@@ -140,6 +146,6 @@ func (m *HonestMinerMaster) processTransaction(t *pb.Transaction) bool {
     return true
 }
 
-func (m *HonestMinerMaster) gatherBatch(t *pb.Transaction) bool {
-    
+func (m *HonestMinerMaster) gatherBatch() bool {
+    return true
 }

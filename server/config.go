@@ -40,7 +40,7 @@ type MinerConfig struct {
     HonestMinerConfig *HonestMinerConfig
 }
 
-type HonestMinerConfig {
+type HonestMinerConfig struct {
     IncomingWait time.Duration
 }
 
@@ -103,9 +103,9 @@ func NewServerConfig(configFilename string, selfID string) (config *ServerConfig
         MinerType: "Honest",
         NrWorkers: 1,
 
-        HonestMinerConfig : HonestMinerConfig {
-            IncomingWait: 100 * time.Millisecond
-        }
+        HonestMinerConfig : &HonestMinerConfig {
+            IncomingWait: 100 * time.Millisecond,
+        },
     }
 
     config.P2P = &P2PConfig {
