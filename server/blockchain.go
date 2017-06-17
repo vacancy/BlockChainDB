@@ -16,13 +16,13 @@ type BlockInfo struct {
     Hash string
     Json string
     Block *pb.Block
+    //Valid: on the longest branch
+    Valid bool
 }
 
 type BlockChain struct {
     // hash(jsonify(b)) -> b
     Blocks       map[string]*BlockInfo
-    // hash(jsonify(b)) -> valid(b)
-    ValidBlocks  map[string]bool
     // t.UUID -> t
     Transactions map[string]*pb.Transaction
     // t.UUID -> []*BlockInfo
@@ -37,7 +37,6 @@ type BlockChain struct {
     p2pc              *P2PClient
 
     blocksMutex       *sync.RWMutex
-    validBlocksMutex  *sync.RWMutex
     transactionsMutex *sync.RWMutex
     transBlocksMutex  *sync.RWMutex
     usersMutex        *sync.RWMutex
@@ -59,7 +58,6 @@ func NewBlockChain(c *ServerConfig, p2pc *P2PClient) (bc *BlockChain) {
         p2pc: p2pc,
 
         blocksMutex: &sync.RWMutex{},
-        validBlocksMutex: &sync.RWMutex{},
         transactionsMutex: &sync.RWMutex{},
         transBlocksMutex: &sync.RWMutex{},
         usersMutex: &sync.RWMutex{},
@@ -119,24 +117,22 @@ func (bc *BlockChain) VerifyTransaction6(t *pb.Transaction) (rc int, hash string
     // TODO::
     bc.transBlocksMutex.RLock()
     defer bc.transBlocksMutex.RUnlock()
-    bc.validBlocksMutex.RLock()
-    defer bc.validBlocksMutex.RUnlock()
 
     if blocks, ok := bc.TransBlocks[t.UUID]; ok {
         for _, block := range blocks {
-            if bc.ValidBlocks[block.Hash] {
+            if block.Valid && block.Block.BlockID >= bc.Latest.Block.BlockID - 6 {
                 return 2, block.Hash
             }
         }
         return 1, blocks[0].Hash
     }
+
     bc.usersMutex.RLock()
     defer bc.usersMutex.RUnlock()
     if _, ok := bc.Transactions[t.UUID]; ok {
         if bc.Users[t.FromID].Money >= t.Value {
             return 1, "!"
         }
-        return 0, "?"
     }
     return 0, "?"
 }
@@ -204,7 +200,19 @@ func (bc *BlockChain) refreshBlockChain(bi *BlockInfo) (err error) {
     // Handle chain switch and go through the transactions in `b`
     bc.usersMutex.Lock()
     defer bc.usersMutex.Unlock()
+    bc.transBlocksMutex.Lock()
+    defer bc.transBlocksMutex.Unlock()
     // TODO::
+    b := bi.Block
+    for _, trans := b.Transactions {
+        blocks := bc.TransBlocks[trans.UUID]
+        if blocks == nil {
+            blocks := []
+        } else {
+            blocks = append(blocks, b)
+        }
+        bc.TransBlocks[trans.UUID] = blocks
+    }
 
     bc.Latest = bi
     return
