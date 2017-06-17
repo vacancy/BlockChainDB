@@ -2,6 +2,7 @@ package main
 
 import (
     "sync"
+    "log"
     "fmt"
     "strings"
 
@@ -55,7 +56,7 @@ type BlockChain struct {
 }
 
 func NewBlockChain(c *ServerConfig, p2pc *P2PClient) (bc *BlockChain) {
-    return &BlockChain{
+    bc = &BlockChain{
         Blocks: make(map[string]*BlockInfo),
         LatestBlock: &BlockInfo{
             Json: "{}",
@@ -78,6 +79,9 @@ func NewBlockChain(c *ServerConfig, p2pc *P2PClient) (bc *BlockChain) {
 
         defaultUserInfo: &UserInfo{Money: c.Common.DefaultMoney},
     }
+
+    bc.Blocks[strings.Repeat("0", 64)] = bc.LatestBlock
+    return
 }
 
 // Public methods: block
@@ -117,6 +121,8 @@ func (bc *BlockChain) pushBlockJsonInternal(json string, needVerifyInfo bool) (l
         Block: block,
         Valid6: false,
     }
+
+    log.Printf("On bc.pushBlockJsonInternal %s\n", json)
 
     lastChanged = false
 
@@ -211,16 +217,28 @@ func (bc *BlockChain) VerifyTransaction6(t *pb.Transaction) (rc int, hash string
     return 0, "?"
 }
 
-func (bc *BlockChain) GetUserInfo(uid string) (u *UserInfo) {
+func (bc *BlockChain) SetDefaultUserInfo(uid string) (u *UserInfo) {
+    bc.UserMutex.Lock()
+    defer bc.UserMutex.Unlock()
+
     return bc.setDefaultUserInfo(uid)
 }
 
-func (bc *BlockChain) GetUserInfoWithDefault(uid string) (u *UserInfo) {
+func (bc *BlockChain) GetUserInfo(uid string) (u *UserInfo) {
+    log.Printf("getUserInfo.UserMutex.RLock()")
+    bc.UserMutex.RLock()
+    log.Printf("getUserInfo.UserMutex.RLock() succ")
+    defer bc.UserMutex.RUnlock()
+
+    return bc.GetUserInfoAtomic(uid)
+}
+
+func (bc *BlockChain) GetUserInfoAtomic(uid string) (u *UserInfo) {
     u, ok := bc.getUserInfo(uid)
     if !ok {
         return bc.defaultUserInfo
-   }
-   return u
+    }
+    return u
 }
 
 // Private: Execution
@@ -242,16 +260,16 @@ func (bc *BlockChain) undoBlock(x *BlockInfo) {
 
 func (bc *BlockChain) doTransaction(t *pb.Transaction) (err error) {
     // Require: UserMutex, TransactionMutex.
-    bc.Users[t.FromID].Money -= t.Value
-    bc.Users[t.ToID].Money += t.Value - t.MiningFee
+    bc.setDefaultUserInfo(t.FromID).Money -= t.Value
+    bc.setDefaultUserInfo(t.ToID).Money += t.Value - t.MiningFee
     delete(bc.PendingTransactions, t.UUID)
     return nil
 }
 
 func (bc *BlockChain) undoTransaction(t *pb.Transaction) (err error) {
     // Require: UserMutex, TransactionMutex.
-    bc.Users[t.FromID].Money += t.Value
-    bc.Users[t.ToID].Money -= t.Value - t.MiningFee
+    bc.setDefaultUserInfo(t.FromID).Money += t.Value
+    bc.setDefaultUserInfo(t.ToID).Money -= t.Value - t.MiningFee
     bc.PendingTransactions[t.UUID] = t
     return nil
 }
@@ -523,7 +541,7 @@ func (bc *BlockChain) verifyTransactionRepeat(t *pb.Transaction) (err error) {
 func (bc *BlockChain) verifyTransactionMoney(t *pb.Transaction) (err error) {
     // Verify whether the transaction can be done (considering user accounts).
     // Require: UserMutex.R
-    balance := bc.Users[t.FromID].Money
+    balance := bc.GetUserInfoAtomic(t.FromID).Money
     if balance < t.Value {
         return fmt.Errorf("Verify transaction money failed, insufficient balance: %d, transfer money: %d.",
                 balance, t.Value)
@@ -534,17 +552,11 @@ func (bc *BlockChain) verifyTransactionMoney(t *pb.Transaction) (err error) {
 // Private: User
 
 func (bc *BlockChain) getUserInfo(uid string) (u *UserInfo, ok bool) {
-    bc.UserMutex.RLock()
-    defer bc.UserMutex.RUnlock()
-
     u, ok = bc.Users[uid]
     return
 }
 
 func (bc *BlockChain) setDefaultUserInfo(uid string) (u *UserInfo) {
-    bc.UserMutex.Lock()
-    defer bc.UserMutex.Unlock()
-
     u, ok := bc.Users[uid]
     if !ok {
         u = &UserInfo{Money: bc.config.Common.DefaultMoney}
@@ -552,4 +564,3 @@ func (bc *BlockChain) setDefaultUserInfo(uid string) (u *UserInfo) {
     }
     return
 }
-

@@ -26,6 +26,7 @@ func NewServer(config *ServerConfig) (s *Server, err error) {
 
 // Client-side database interface 
 func (s *Server) Get(ctx context.Context, in *pb.GetRequest) (*pb.GetResponse, error) {
+    log.Printf("On server.Get %s.", in.UserID)
     u := s.Master.GetUserInfo(in.UserID)
     return &pb.GetResponse{Value: u.Money}, nil
 }
@@ -48,10 +49,12 @@ func (s *Server) GetBlock(ctx context.Context, in *pb.GetBlockRequest) (*pb.Json
     return &pb.JsonBlockString{Json: bi.Json}, nil
 }
 func (s *Server) PushBlock(ctx context.Context, in *pb.JsonBlockString) (*pb.Null, error) {
+    log.Printf("On server.PushBlock %s.", in.Json)
     s.Master.OnBlockAsync(in.Json)
     return &pb.Null{}, nil
 }
 func (s *Server) PushTransaction(ctx context.Context, in *pb.Transaction) (*pb.Null, error) {
+    log.Printf("On server.Transaction %s.", in.UUID)
     s.Master.OnTransactionAsync(in)
     return &pb.Null{}, nil
 }

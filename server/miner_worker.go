@@ -83,8 +83,8 @@ func (w *SimpleMinerWorker) Mainloop() {
                 }
             })()
 
-            prefix = prefix
-            suffix = suffix
+            prefix = w.prefix
+            suffix = w.suffix
             w.mutex.Unlock()
 
             next = 0

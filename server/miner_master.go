@@ -90,7 +90,7 @@ type BaseMinerMaster struct {
 }
 
 func (m *BaseMinerMaster) GetUserInfo(uid string) *UserInfo {
-    return m.BC.GetUserInfoWithDefault(uid)
+    return m.BC.GetUserInfo(uid)
 }
 
 func (m *BaseMinerMaster) GetLatestBlock() *BlockInfo {
@@ -156,7 +156,7 @@ func (m *HonestMinerMaster) OnBlockAsync(json string) {
 func (m *HonestMinerMaster) OnWorkerSuccess(json string) {
     log.Printf("On worker success: %s.", json)
     _, err := m.BC.DeclareBlockJson(json)
-    if err != nil {
+    if err == nil {
         _ = m.P2PC.RemotePushBlockAsync(json)
         m.updateWorkingSet(true)
     } else {

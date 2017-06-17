@@ -74,7 +74,7 @@ func (st *BlockChainTStack) getMoney(uid string) (money int32) {
     if money, ok := st.UserMoney[uid]; ok {
         return money
     }
-    return st.BC.GetUserInfoWithDefault(uid).Money
+    return st.BC.GetUserInfoAtomic(uid).Money
 }
 
 func (st *BlockChainTStack) verifyTransaction(t *pb.Transaction) (ok bool) {
