@@ -296,6 +296,7 @@ func (bc *BlockChain) refreshBlockChain(bi *BlockInfo) (latestChanged bool, err 
     b := bi.Block
     height := bc.LatestBlock.Block.BlockID
     latestChanged = b.BlockID > height || b.BlockID == height && bi.Hash < bc.LatestBlock.Hash
+    log.Printf("!! LatestBlock change failed: %s. Prechecking failed.", b.Hash)
     if !latestChanged {
         return
     }
@@ -307,8 +308,11 @@ func (bc *BlockChain) refreshBlockChain(bi *BlockInfo) (latestChanged bool, err 
     }
 
     if latestChanged {
-        log.Printf("!! LatestBlock changed to: %s\n", bc.LatestBlock.Hash)
+        log.Printf("!! LatestBlock changed to: %s.", bc.LatestBlock.Hash)
+    } else {
+        log.Printf("!! LatestBlock change failed: %s. Remain %s.", b.Hash, bc.LatestBlock.Hash)
     }
+
     return
 }
 
