@@ -6,12 +6,11 @@ import (
 )
 
 type BlockChainTStack struct {
-    // NOTE:: Owned by transactionsMutex
+    // NOT thread-safe
     Stack []*pb.Transaction
     BC *BlockChain
-    Users map[string]*UserInfo
+    UserMoney map[string]int32
 
-    mutex sync.Mutex
     needLock bool
 }
 
@@ -19,7 +18,6 @@ func NewBlockChainTStack(bc *BlockChain, needLock bool) *BlockChainTStack {
     st := &BlockChainTStack{
         Stack: make([]*pb.Transaction, 0),
         BC: bc,
-        mutex: &sync.Mutex,
         needLock: needLock
     }
 
@@ -34,13 +32,32 @@ func (st *BlockChainTStack) Close() {
     }
 }
 
-func (st *BlockChainTStack) TestAndSet() (succ bool) {
-    st.mutex.Lock()
-    st.mutex.Unlock()
+func (st *BlockChainTStack) TestAndDo(t *pb.Transaction) (succ bool) {
+    if ok := st.verifyTransaction(t); ok {
+        st.doTransaction(t)
+    }
+    return false
 }
 
 func (st *BlockChainTStack) getMoney(uid string) (money int32) {
-    if money, ok := st.Users[]
+    if money, ok := st.UserMoney[uid]; ok {
+        return
+    }
+    return st.BC.GetUserInfoWithDefault(uid).Money
+}
+
+func (st *BlockChainTStack) verifyTransaction(t *pb.Transaction) (ok bool) {
+    balance := st.getMoney(t.FromID)
+    return balance >= t.Value
+}
+
+func (st *BlockChainTStack) doTransaction(t *pb.Transaction) (err error){
+    fromMoney := st.getMoney(t.FromID)
+    toMoney := st.getMoney(t.ToID)
+
+    UserMoney[t.FromID] := fromMoney - t.Value
+    UserMoney[t.ToID] := toMoney + (t.Value - t.MiningFee)
+    return nil
 }
 
 /*
