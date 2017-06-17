@@ -43,6 +43,8 @@ type MinerMaster interface {
     GetBlock(bid string) *BlockInfo
     OnBlockAsync(json string)
     OnTransactionAsync(t *pb.Transaction)
+
+    OnWorkerSuccess(json string)
 }
 
 func NewMinerMaster(c *ServerConfig) (m MinerMaster, e error) {
@@ -122,27 +124,25 @@ func (m *HonestMinerMaster) OnTransactionAsync(t *pb.Transaction) {
 }
 
 func (m *HonestMinerMaster) OnBlockAsync(json string) {
-    oldLatest := m.BC.GetLatestBlock()
-    // TODO:: 
-    _, err := m.BC.PushBlockJson(json)
-    if err == nil {
-        newLatest := m.BC.GetLatestBlock()
-        if oldLatest.Hash != newLatest.Hash {
-            // TODO:: Notify
-        }
+    lastChanged, err := m.BC.PushBlockJson(json)
+    if lastChanged {
+        // First, test whether the current working block is valid or not.
     }
+}
+
+func (m *HonestMinerMaster) OnWorkerSuccess(json string) {
+    // First, declare
+    // Publish
 }
 
 func (m *HonestMinerMaster) processTransaction(t *pb.Transaction) bool {
     // TODO:: Flow control
 
-    // err := m.BC.PushTransaction(t, true)
-    var err error = nil
-    if err != nil {
+    rc := m.BC.PushTransaction(t, true)
+    if rc == 0 || rc == 2 {
         return false
     }
 
-    // TODO:: Notify
     return true
 }
 

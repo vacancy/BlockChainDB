@@ -29,3 +29,8 @@ func UUID128bit() string {
     u[8] = (u[8] | 0x80) & 0xBF
     return fmt.Sprintf("%x", u)
 }
+
+func CheckNonce(nonce string) bool {
+    // TODO:: 
+    return true
+}

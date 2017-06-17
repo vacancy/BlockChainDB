@@ -107,26 +107,30 @@ func (p2pc *P2PClient) remoteRequestAsync(funcname string, req proto.Message,
     result := make(chan proto.Message, nrThreads)
     done := make(chan bool, nrThreads)
     mapper := func (id int) {
-        var unfinished []int
+        finished := make(map[int]bool)
         for t := 0; t < nrTrials; t++ {
-            unfinished = make([]int, 0)
-
             for j := id; j < nrClients; j += nrThreads {
                 if r.AcquiredClose() {
                     break
                 }
 
+                if _, ok := finished[j]; ok {
+                    continue
+                }
+
                 // TODO:: choose server sequence randomly
                 rc := p2pc.Clients[j]
                 if !rc.IsAlive {
-                   continue
+                    finished[j] := true
+                    continue
                 }
 
                 res, err := dispatch(rc, req)
-                if err != nil {
+                if err == nil {
                     if needResult {
                         result <- res
                     }
+                    finished[j] := true
                 }
             }
 
@@ -199,7 +203,7 @@ func (p2pc *P2PClient) RemotePushTransactionAsync(msg *pb.Transaction) *P2PRespo
 
     p2pc.remoteRequestAsync("PushTransaction", msg, res,
         p2pc.config.P2P.PushParallel, p2pc.config.P2P.PushTimeout,
-        false, p2pc.config.P2P.PushTrials, p2pc.config.P2P.PushRetryInterval)
+        true, p2pc.config.P2P.PushTrials, p2pc.config.P2P.PushRetryInterval)
 
     return res
 }
