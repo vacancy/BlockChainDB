@@ -557,9 +557,9 @@ func (bc *BlockChain) verifyTransactionUUID(t *pb.Transaction) (err error) {
     // Return nil when succeed.
     // Require: TransactionMutex.R
     if f, ok := bc.AllTransactions[t.UUID]; ok {
-        if f.Type != t.Type || f.FromID != t.FromID || f.ToID != t.ToID || 
+        if f.Type != t.Type || f.FromID != t.FromID || f.ToID != t.ToID ||
            f.Value != t.Value || f.MiningFee != t.MiningFee {
-            return fmt.Errorf("verify transaction failed: different transaction with same UUID %v, %v", t, f)
+            return fmt.Errorf("Verify transaction failed: different transaction with same UUID %s.", t.UUID)
         }
     }
     return nil
