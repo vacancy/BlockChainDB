@@ -41,7 +41,7 @@ for I in `seq 0 9`; do
 done
 echo "You should already see 5~10 blocks."
 sleep 10
-echo "Check value: expecting value=80"
+echo "Check value: expecting value=1080"
 ./example/test_client -T=GET -user=USER0099
 
 echo "Test completed. Please verify BlockChain is legitimate and all earliest transactions are verified."
