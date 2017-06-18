@@ -275,7 +275,7 @@ func (bc *BlockChain) VerifyTransaction6(t *pb.Transaction) (rc int, hash string
     if blocks, ok := bc.Trans2Blocks[t.UUID]; ok {
         for _, block := range blocks {
             if block.OnLongest {
-                if block.Block.BlockID >= bc.LatestBlock.Block.BlockID - 6 {
+                if block.Block.BlockID <= bc.LatestBlock.Block.BlockID - 6 {
                     return 2, block.Hash
                 } else {
                     return 1, block.Hash

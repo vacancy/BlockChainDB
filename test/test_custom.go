@@ -8,11 +8,14 @@ import (
     "io/ioutil"
     "log"
     "math/rand"
+    "strings"
 
+    "../hash"
     pb "../protobuf/go"
 
     "golang.org/x/net/context"
     "google.golang.org/grpc"
+    "github.com/golang/protobuf/jsonpb"
 )
 
 var address = func() string {
@@ -44,12 +47,56 @@ func UUID128bit() string {
     return fmt.Sprintf("%x", u)
 }
 
-func Transfer(c pb.BlockChainMinerClient, FromID string, ToID string, Value int, Fee int) (succ bool, err error){
-    log.Printf("[TRANSFER] %s -> %s, Value: %d, MiningFee: %d", FromID, ToID, Value, Fee)
-    r, err := c.Transfer(context.Background(), &pb.Transaction{
+func makeTrans(FromID string, ToID string, Value int, Fee int) (t *pb.Transaction) {
+    return &pb.Transaction{
             Type:pb.Transaction_TRANSFER,
             UUID:UUID128bit(),
-            FromID: FromID, ToID: ToID, Value: int32(Value), MiningFee: int32(Fee)})
+            FromID: FromID, ToID: ToID, Value: int32(Value), MiningFee: int32(Fee)}
+}
+
+func makeBlock(blockID int, prevHash string, trans []*pb.Transaction, minerID string) (block *pb.Block, jsonString string, hashRes string, err error){
+    block = &pb.Block{
+        BlockID: int32(blockID),
+        PrevHash: prevHash,
+        Transactions: trans,
+        MinerID: minerID,
+        Nonce: "00000000",
+    }
+    jsonMarshaler := &jsonpb.Marshaler{EnumsAsInts: false}
+    json, err := jsonMarshaler.MarshalToString(block)
+    if err != nil {
+        return
+    }
+    presuf := strings.Split(json, "\"Nonce\":\"00000000\"")
+    if len(presuf) != 2 {
+        err = fmt.Errorf("GG")
+        return
+    }
+    prefix, suffix := presuf[0], presuf[1]
+    prefix = prefix + "\"Nonce\":\""
+    suffix = "\"" + suffix
+
+    for i := 0; true; i++ {
+        // nonce := fmt.Sprintf("%08x", w.rng.Uint32())
+        nonce := fmt.Sprintf("%08x", i)
+
+        str := strings.Join([]string{prefix, nonce, suffix}, "")
+        hashRes = hash.GetHashString(str)
+        succ := hash.CheckHash(hashRes)
+
+        if succ {
+            block.Nonce = nonce
+            jsonString = str
+            break
+        }
+    }
+    return
+}
+
+func Transfer(c pb.BlockChainMinerClient, FromID string, ToID string, Value int, Fee int) (trans *pb.Transaction, succ bool, err error) {
+    log.Printf("[TRANSFER] %s -> %s, Value: %d, MiningFee: %d", FromID, ToID, Value, Fee)
+    trans = makeTrans(FromID, ToID, Value, Fee)
+    r, err := c.Transfer(context.Background(), trans)
     if err != nil {
         log.Printf("TRANSFER Error: %v", err)
         return
@@ -73,30 +120,73 @@ func Get(c pb.BlockChainMinerClient, UserID string) (res int, err error) {
     return
 }
 
+func Verify(c pb.BlockChainMinerClient, trans *pb.Transaction) (res int, err error) {
+    log.Printf("[VERIFY] %v", trans)
+    r, err := c.Verify(context.Background(), trans)
+    if err != nil {
+        log.Printf("VERIFY Error: %v", err)
+        return
+    } else {
+        res = int(r.Result)
+        log.Printf("VERIFY Return: %d", res)
+        log.Printf("VERIFY Return Block: %s", r.BlockHash)
+    }
+    return
+}
+
+func PushTransaction(c pb.BlockChainMinerClient, trans *pb.Transaction) (err error) {
+    log.Printf("[PUSH TRANSACTION] %v", trans)
+    _, err = c.PushTransaction(context.Background(), trans)
+    if err != nil {
+        log.Printf("PUSH TRANSACTION Error: %v", err)
+        return
+    }
+    return
+}
+
+func PushBlock(c pb.BlockChainMinerClient, json string) (err error) {
+    log.Printf("[PUSH BLOCK] %s", json)
+    _, err = c.PushBlock(context.Background(), &pb.JsonBlockString{Json: json})
+    if err != nil {
+        log.Printf("PUSH TRANSACTION Error: %v", err)
+        return
+    }
+    return
+}
+
+func GetBlock(c pb.BlockChainMinerClient, blockHash string) (json string, err error) {
+    log.Printf("[GET BLOCK] %s", blockHash)
+    res, err := c.GetBlock(context.Background(), &pb.GetBlockRequest{BlockHash: blockHash})
+    if err != nil {
+        log.Printf("GET BLOCK Error: %v", err)
+        return
+    } else {
+        json = res.Json
+        log.Printf("GET BLOCK return: %s", json)
+        return
+    }
+    return
+}
+
 func doTest(c pb.BlockChainMinerClient, cur int) (passed bool, err error) {
     passed = false
     succ := false
     res := 0
 
-    sleepForBlock := 5000 * time.Millisecond
+    //NOTE: This time should be adjust according to hardness, wait for the blocks to be computed.
+    sleepForBlock := 5000 * time.Millisecond 
 
     switch cur {
-    case 0:
-        log.Printf("Check transfer (FromID == ToID)")
-        succ, err = Transfer(c, "T01U0000", "T01U0000", 5, 1)
-        log.Printf("Expected return: false")
-        if err != nil || succ {
-            return
-        }
+
 
     case 1:
         log.Printf("Check transfer (Value <= MiningFee)")
-        succ, err = Transfer(c, "T02U0000", "T02U0001", 5, 5)
+        _, succ, err = Transfer(c, "T01U0000", "T01U0001", 5, 5)
         log.Printf("Expected return: false")
         if err != nil || succ {
             return
         }
-        succ, err = Transfer(c, "T02U0000", "T02U0001", 30, 50)
+        _, succ, err = Transfer(c, "T01U0000", "T01U0001", 30, 50)
         log.Printf("Expected return: false")
         if err != nil || succ {
             return
@@ -104,12 +194,12 @@ func doTest(c pb.BlockChainMinerClient, cur int) (passed bool, err error) {
 
     case 2:
         log.Printf("Check transfer (MiningFee <= 0)")
-        succ, err = Transfer(c, "T03U0000", "T03U0001", 10, -1)
+        _, succ, err = Transfer(c, "T02U0000", "T02U0001", 10, -1)
         log.Printf("Expected return: false")
         if err != nil || succ {
             return
         }
-        succ, err = Transfer(c, "T03U0000", "T03U0001", 100, 0)
+        _, succ, err = Transfer(c, "T02U0000", "T02U0001", 100, 0)
         log.Printf("Expected return: false")
         if err != nil || succ {
             return
@@ -117,7 +207,7 @@ func doTest(c pb.BlockChainMinerClient, cur int) (passed bool, err error) {
 
     case 3:
         log.Printf("Check transfer (Value < 0)")
-        succ, err = Transfer(c, "T03U0000", "T03U0001", -2, 5)
+        _, succ, err = Transfer(c, "T03U0000", "T03U0001", -2, 5)
         log.Printf("Expected return: false")
         if err != nil || succ {
             return
@@ -125,22 +215,30 @@ func doTest(c pb.BlockChainMinerClient, cur int) (passed bool, err error) {
     
     case 4:
         log.Printf("Check transfer (FAKE User ID)")
-        succ, err = Transfer(c, "FAKE00", "T04U0001", 10, 5)
+        _, succ, err = Transfer(c, "FAKE00", "T04U0001", 10, 5)
         log.Printf("Expected return: false")
         if err != nil || succ {
             return
         }
-        succ, err = Transfer(c, "T04U0000", "FAKE000001", 10, 5)
+        _, succ, err = Transfer(c, "T04U0000", "FAKE000001", 10, 5)
         log.Printf("Expected return: false")
         if err != nil || succ {
             return
         }
 
-    case 5: 
+    case 5:
+        log.Printf("Check transfer (FromID == ToID)")
+        _, succ, err = Transfer(c, "T05U0000", "T05U0000", 5, 1)
+        log.Printf("Expected return: false")
+        if err != nil || succ {
+            return
+        }
+
+    case 6: 
         log.Printf("Check transfer (multi -> one)")
         for i := 0; i < 10; i ++ {
-            FromID := fmt.Sprintf("T05U00%02d", i)
-            succ, err = Transfer(c, FromID, "T05U9999", 10, 5)
+            FromID := fmt.Sprintf("T06U00%02d", i)
+            _, succ, err = Transfer(c, FromID, "T06U9999", 10, 5)
             log.Printf("Expected return: true")
             if err != nil || !succ {
                 return
@@ -148,7 +246,7 @@ func doTest(c pb.BlockChainMinerClient, cur int) (passed bool, err error) {
         }
 
         time.Sleep(sleepForBlock)
-        res, err = Get(c, "T05U9999")
+        res, err = Get(c, "T06U9999")
         if err != nil {
             return
         }
@@ -159,7 +257,7 @@ func doTest(c pb.BlockChainMinerClient, cur int) (passed bool, err error) {
             return
         }
 
-        res, err = Get(c, "T05U0005")
+        res, err = Get(c, "T06U0005")
         if err != nil {
             return
         }
@@ -170,16 +268,16 @@ func doTest(c pb.BlockChainMinerClient, cur int) (passed bool, err error) {
             return
         }
 
-    case 6: 
+    case 7: 
         log.Printf("Check transfer (valid later)")
-        succ, err = Transfer(c, "T06U0000", "T06U9999", 10, 5)
+        _, succ, err = Transfer(c, "T07U0000", "T07U9999", 10, 5)
         log.Printf("Expected return: true")
         if err != nil || !succ {
             return
         }
         expected0 := 990
         expected9 := 1005
-        succ, err = Transfer(c, "T06U9999", "T06U0000", 2000, 1)
+        _, succ, err = Transfer(c, "T07U9999", "T07U0000", 2000, 1)
         if err != nil {
             return
         }
@@ -187,7 +285,7 @@ func doTest(c pb.BlockChainMinerClient, cur int) (passed bool, err error) {
             expected0 += 1999
             expected9 -= 2000
         }
-        succ, err = Transfer(c, "T06U0000", "T06U9999", 1000, 1)
+        _, succ, err = Transfer(c, "T07U0000", "T07U9999", 1000, 1)
         if err != nil {
             return
         }
@@ -195,14 +293,14 @@ func doTest(c pb.BlockChainMinerClient, cur int) (passed bool, err error) {
             expected0 -= 1000
             expected9 += 999
         }
-        succ, err = Transfer(c, "T06U5555", "T06U9999", 1000, 1)
+        _, succ, err = Transfer(c, "T07U5555", "T07U9999", 1000, 1)
         if err != nil || !succ {
             return
         }
         expected9 += 999
 
         time.Sleep(sleepForBlock)
-        res, err = Get(c, "T06U0000")
+        res, err = Get(c, "T07U0000")
         if err != nil {
             return
         }
@@ -213,7 +311,7 @@ func doTest(c pb.BlockChainMinerClient, cur int) (passed bool, err error) {
             return
         }
 
-        res, err = Get(c, "T06U9999")
+        res, err = Get(c, "T07U9999")
         if err != nil {
             return
         }
@@ -224,20 +322,23 @@ func doTest(c pb.BlockChainMinerClient, cur int) (passed bool, err error) {
             return
         }
 
-    case 7:
+    case 8:
         log.Printf("Check transfer (collect money)")
 
-        nUser := 50
+        nUser := 30
         var money []int
+        var received []bool
+        var trans []*pb.Transaction
+        var t *pb.Transaction
 
         for i := 0; i <= nUser; i ++ {
             money = append(money, 1000)
         }
         for i := 0; i < nUser; i ++ {
-            FromID := fmt.Sprintf("T07U%04d", i)
-            ToID := fmt.Sprintf("T07U%04d", i + 1)
+            FromID := fmt.Sprintf("T08U%04d", i)
+            ToID := fmt.Sprintf("T08U%04d", i + 1)
             amount := 1000 + i * (1000 - 1)
-            succ, err = Transfer(c, FromID, ToID, amount, 1)
+            t, succ, err = Transfer(c, FromID, ToID, amount, 1)
             log.Printf("Expected return: true")
             if err != nil {
                 return
@@ -246,14 +347,47 @@ func doTest(c pb.BlockChainMinerClient, cur int) (passed bool, err error) {
                 money[i] -= amount
                 money[i + 1] += amount - 1
             }
+            received = append(received, succ)
+            trans = append(trans, t)
         }
 
-        for i := 0; i < 6; i ++ {
+        for i := 0; i < 4; i ++ {
             time.Sleep(sleepForBlock)
         }
 
+        expected := 2
+        for i := 0; i < nUser; i ++ {
+            res, err = Verify(c, trans[i])
+            if err != nil {
+                return
+            }
+            if res < expected {
+                expected = res
+            }
+            if received[i] && (res == 0 && res != expected) || (res > expected){
+                log.Printf("incorrect VERIFY result, result: %d, expected: %d", res, expected)
+                return
+            }
+            if !received[i] && res != 0 {
+                log.Printf("incorrect VERIFY result, result: %d, expected: %d", res, 0)
+                return
+            }
+        }
+
+        fakeTrans := trans[0]
+        fakeTrans.Value = 998
+        res, err = Verify(c, trans[0])
+        if err != nil {
+            return
+        }
+        if res != 0 {
+            log.Printf("transaction has been manipulated, need check within same UUID")
+            log.Printf("incorrect VERIFY result, result: %d, expected: %d", res, expected)
+            return
+        }
+
         for i := 0; i <= nUser; i ++ {
-            UserID := fmt.Sprintf("T07U%04d", i)
+            UserID := fmt.Sprintf("T08U%04d", i)
             res, err = Get(c, UserID)
             if err != nil {
                 return
@@ -264,6 +398,119 @@ func doTest(c pb.BlockChainMinerClient, cur int) (passed bool, err error) {
                 log.Printf("incorrect GET result, result: %d, expected: %d", res, expected)
                 return
             }
+        }
+
+    case 9:
+        log.Printf("Check block (push block)")
+        t := makeTrans("T09U0000", "T09U0001", 5, 1)
+        trans := []*pb.Transaction{t}
+
+        root := strings.Repeat("0", 64)
+        blockID := 0
+        _, json, hashRes, err := makeBlock(blockID + 1, root, trans, "Server01")
+        if err != nil {
+            return false, err
+        }
+        log.Printf("hash: %s", hashRes)
+        blockID += 1
+        root = hashRes
+        PushBlock(c, json)
+        
+        time.Sleep(sleepForBlock)
+
+        ret, err := GetBlock(c, hashRes)
+        if err != nil {
+            return false, err
+        }
+        log.Printf("Expected return: %s", json)
+        if ret != json {
+            log.Printf("incorrect GET BLOCK result, result: %s, expected: %s", ret, json)
+            return false, nil
+        }
+
+    case 10:
+        log.Printf("Check block (duplicate trans in block)")
+        t := makeTrans("T10U0000", "T10U0001", 5, 1)
+        trans := []*pb.Transaction{t, t}
+
+        root := strings.Repeat("0", 64)
+        blockID := 0
+        _, json, hashRes, err := makeBlock(blockID + 1, root, trans, "Server01")
+        if err != nil {
+            return false, err
+        }
+        log.Printf("hash: %s", hashRes)
+        blockID += 1
+        root = hashRes
+        PushBlock(c, json)
+        
+        time.Sleep(sleepForBlock)
+
+        ret, err := GetBlock(c, hashRes)
+        if err != nil {
+            return false, err
+        }
+        log.Printf("Expected return: ")
+        if ret == json {
+            log.Printf("incorrect GET BLOCK result, result: %s, expected: %s", ret, "")
+            return false, nil
+        }
+
+    case 11:
+        log.Printf("Check block (incorrect MinerID)")
+        t := makeTrans("T11U0000", "T11U0001", 5, 1)
+        trans := []*pb.Transaction{t}
+
+        root := strings.Repeat("0", 64)
+        blockID := 0
+        _, json, hashRes, err := makeBlock(blockID + 1, root, trans, "Serveroo")
+        if err != nil {
+            return false, err
+        }
+        log.Printf("hash: %s", hashRes)
+        blockID += 1
+        root = hashRes
+        PushBlock(c, json)
+        
+        time.Sleep(sleepForBlock)
+
+        ret, err := GetBlock(c, hashRes)
+        if err != nil {
+            return false, err
+        }
+        log.Printf("Expected return: ")
+        if ret == json {
+            log.Printf("incorrect GET BLOCK result, result: %s, expected: %s", ret, "")
+            return false, nil
+        }
+
+
+    case 12:
+        log.Printf("Check block (incorrect BlockID)")
+        t := makeTrans("T12U0000", "T12U0001", 5, 1)
+        trans := []*pb.Transaction{t}
+
+        root := strings.Repeat("0", 64)
+        blockID := 0
+        _, json, hashRes, err := makeBlock(blockID + 2, root, trans, "Server01")
+        if err != nil {
+            return false, err
+        }
+        log.Printf("hash: %s", hashRes)
+        blockID += 1
+        root = hashRes
+        PushBlock(c, json)
+        
+        time.Sleep(sleepForBlock)
+
+        ret, err := GetBlock(c, hashRes)
+        if err != nil {
+            return false, err
+        }
+        log.Printf("Expected return: ")
+        if ret == json {
+            log.Printf("incorrect GET BLOCK result, result: %s, expected: %s", ret, "")
+            return false, nil
         }
 
     }
@@ -286,7 +533,7 @@ func main() {
     c := pb.NewBlockChainMinerClient(conn)
     testNo := *TestCase
 
-    nTests := 10
+    nTests := 15
     nPassed := 0
     testAll := testNo < 0
 
