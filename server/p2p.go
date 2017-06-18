@@ -25,10 +25,11 @@ type RemoteClient struct {
     IsAlive       bool
     State         RemoteServerState
 
+    RecoverHook   func (height int32, hash string, json string)
     ConnError     error
 }
 
-func NewRemoteClient(serverConfig *RemoteServerConfig) (rc *RemoteClient) {
+func NewRemoteClient(serverConfig *RemoteServerConfig, pollInterval time.Duration) (rc *RemoteClient) {
     conn, err := grpc.Dial(serverConfig.Addr, grpc.WithInsecure())
     if err != nil {
         rc = &RemoteClient{
@@ -37,6 +38,7 @@ func NewRemoteClient(serverConfig *RemoteServerConfig) (rc *RemoteClient) {
             Client: nil,
             IsAlive: false,
 
+            RecoverHook: nil,
             ConnError: err,
         }
     } else {
@@ -45,25 +47,34 @@ func NewRemoteClient(serverConfig *RemoteServerConfig) (rc *RemoteClient) {
             Conn: conn,
             Client: pb.NewBlockChainMinerClient(conn),
             IsAlive: true,
+            RecoverHook: nil,
         }
-        go rc.Monitor()
+        go rc.Monitor(pollInterval)
     }
     return rc
 }
 
-func (rc *RemoteClient) Monitor() {
+func (rc *RemoteClient) Monitor(pollInterval time.Duration) {
     for {
         if !rc.IsAlive {
             break
         }
 
-        if r, err := rc.Client.GetHeight(context.Background(), &pb.Null{}); err == nil {
+        r, err := rc.Client.GetHeight(context.Background(), &pb.Null{})
+        if err == nil {
             rc.State.Height = r.Height
+
+            if rc.RecoverHook != nil {
+                r2, err2 := rc.Client.GetBlock(context.Background(), &pb.GetBlockRequest{BlockHash: r.LeafHash})
+                if err2 == nil {
+                    rc.RecoverHook(r.Height, r.LeafHash, r2.Json)
+                }
+            }
         } else {
             log.Printf("Server polling error: Server=%s, Error=%v.", rc.ServerConfig.ID, err)
         }
 
-        time.Sleep(3 * time.Second)
+        time.Sleep(pollInterval)
     }
 }
 
@@ -91,7 +102,7 @@ func NewP2PClient(config *ServerConfig) (c *P2PClient) {
         if serverConfig.ID == config.Self.ID {
             continue
         }
-        rc := NewRemoteClient(serverConfig)
+        rc := NewRemoteClient(serverConfig, config.P2P.PollInterval)
         c.Clients = append(c.Clients, rc)
     }
 
