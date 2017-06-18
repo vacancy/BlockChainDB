@@ -109,7 +109,7 @@ func NewServerConfig(configFilename string, selfID string) (config *ServerConfig
         NrWorkers: 8,
 
         HonestMinerConfig : &HonestMinerConfig {
-            IncomingWait: 100 * time.Millisecond,
+            IncomingWait: 30 * time.Millisecond,
         },
     }
 
