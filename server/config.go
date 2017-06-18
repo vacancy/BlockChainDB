@@ -42,6 +42,7 @@ type MinerConfig struct {
 
 type HonestMinerConfig struct {
     IncomingWait time.Duration
+    MaxIncomingProcess int
 }
 
 type ServerConfig struct {
@@ -110,6 +111,7 @@ func NewServerConfig(configFilename string, selfID string) (config *ServerConfig
 
         HonestMinerConfig : &HonestMinerConfig {
             IncomingWait: 30 * time.Millisecond,
+            MaxIncomingProcess: 100,
         },
     }
 
@@ -143,6 +145,7 @@ func (config *ServerConfig) Verbose() {
     log.Printf("- MinerType: %s\n", config.Miner.MinerType)
     log.Printf("- NrWorkers: %d\n", config.Miner.NrWorkers)
     log.Printf("- HonestMinerConfig.IncomingWait: %d ms\n", config.Miner.HonestMinerConfig.IncomingWait / time.Millisecond)
+    log.Printf("- HonestMinerConfig.MaxIncomingProcess: %d\n", config.Miner.HonestMinerConfig.MaxIncomingProcess)
     log.Println("")
 
     log.Println("P2P configuration")

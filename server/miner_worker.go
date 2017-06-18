@@ -16,16 +16,22 @@ type MinerWorker interface {
 
 type SimpleMinerWorker struct {
     master MinerMaster
+
+    // For working set
     prefix string
     suffix string
     change bool
     changec *sync.Cond
     mutex *sync.Mutex
     working bool
+
+    // For work
     rng *rand.Rand
+    begin int64
+    end int64
 }
 
-func NewSimpleMinerWorker(m MinerMaster) (w *SimpleMinerWorker) {
+func NewSimpleMinerWorker(m MinerMaster, begin int64, end int64) (w *SimpleMinerWorker) {
     w = &SimpleMinerWorker{
         master: m,
         prefix: "",
@@ -33,9 +39,11 @@ func NewSimpleMinerWorker(m MinerMaster) (w *SimpleMinerWorker) {
         change: false,
         mutex: &sync.Mutex{},
         rng: rand.New(rand.NewSource(rand.Int63())),
+        begin: begin,
+        end: end,
     }
     w.changec = sync.NewCond(w.mutex)
-    log.Printf("Worker %p initialized: Seed=%d.\n", w, w.rng.Uint32())
+    log.Printf("Worker %p initialized: Seed=%d, Range=[%d, %d).\n", w, w.rng.Uint32(), w.begin, w.end)
     return
 }
 
@@ -84,7 +92,7 @@ func (w *SimpleMinerWorker) Mainloop() {
             w.working = true
             prefix = w.prefix
             suffix = w.suffix
-            next = 0
+            next = w.begin
         }
         w.change = false
 
@@ -96,7 +104,8 @@ func (w *SimpleMinerWorker) Mainloop() {
 
         if w.working {
             for i := 0; i <= 10000; i++ {
-                nonce := fmt.Sprintf("%08x", w.rng.Uint32())
+                // nonce := fmt.Sprintf("%08x", w.rng.Uint32())
+                nonce := fmt.Sprintf("%08x", next)
 
                 str := strings.Join([]string{prefix, nonce, suffix}, "")
                 hash := GetHashString(str)
@@ -109,6 +118,11 @@ func (w *SimpleMinerWorker) Mainloop() {
                 }
 
                 next += 1
+            }
+
+            if next >= w.end {
+                // NOTE:: WTF???
+                w.working = false
             }
         }
     }
