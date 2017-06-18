@@ -5,6 +5,7 @@ import (
     "log"
     "fmt"
     "strings"
+    "strconv"
 
     pb "../protobuf/go"
     "github.com/golang/protobuf/jsonpb"
@@ -478,6 +479,8 @@ func (bc *BlockChain) verifyBlockInfo(bi *BlockInfo) (err error) {
 
     if len(b.MinerID) != 8 || b.MinerID[0:6] != "Server" {
         return fmt.Errorf("Verify block failed, invalid miner ID: %s.", b.MinerID)
+    } else if _, err = strconv.Atoi(b.MinerID[6:8]); err != nil {
+        return
     }
 
     if len(b.Transactions) > 50 {
