@@ -114,7 +114,7 @@ func (m *HonestMinerMaster) Start() {
 
     for i := 0; i < m.config.Miner.NrWorkers; i++ {
         log.Printf("Starting worker #%d", i)
-        w := NewSimpleMinerWorker(m, int64(rangeSize * i), int64(rangeSize * (i + 1)), m.config.Miner.BatchSize)
+        w := NewSimpleMinerWorker(m, int64(rangeSize * i), int64(rangeSize * (i + 1)), m.config)
         m.workers = append(m.workers, w)
         go w.Mainloop()
     }
@@ -132,8 +132,11 @@ func (m *HonestMinerMaster) OnClientTransactionAsync(t *pb.Transaction) bool {
     // Broadcast::
     if true {
         res := m.P2PC.RemotePushTransactionAsync(t)
-        _ = res.Get()
+        msg := res.Get()
         res.IgnoreLater()
+        if msg == nil {
+            return false
+        }
     }
     return m.processTransaction(t)
 }

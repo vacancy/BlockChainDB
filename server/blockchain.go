@@ -456,7 +456,7 @@ func (bc *BlockChain) refreshBlockChain(bi *BlockInfo) (latestChanged bool, err 
     }
 
     if !latestChanged {
-        log.Printf("!! LatestBlock change failed: %s. Prechecking failed.", bi.Hash)
+        log.Printf("!! LatestBlock change failed: %s. Remains %s. Prechecking failed.", bi.Hash, bc.LatestBlock.Hash)
         return
     }
 

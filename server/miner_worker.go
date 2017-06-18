@@ -16,6 +16,7 @@ type MinerWorker interface {
 
 type SimpleMinerWorker struct {
     master MinerMaster
+    config *ServerConfig
 
     // For working set
     prefix string
@@ -23,7 +24,9 @@ type SimpleMinerWorker struct {
     change bool
     changec *sync.Cond
     mutex *sync.Mutex
+
     working bool
+    softWorking bool
 
     // For work
     rng *rand.Rand
@@ -32,17 +35,23 @@ type SimpleMinerWorker struct {
     batchSize int
 }
 
-func NewSimpleMinerWorker(m MinerMaster, begin int64, end int64, batchSize int) (w *SimpleMinerWorker) {
+func NewSimpleMinerWorker(m MinerMaster, begin int64, end int64, c *ServerConfig) (w *SimpleMinerWorker) {
     w = &SimpleMinerWorker{
         master: m,
+        config: c,
+
         prefix: "",
         suffix: "",
         change: false,
         mutex: &sync.Mutex{},
+
+        working: false,
+        softWorking: false,
+
         rng: rand.New(rand.NewSource(rand.Int63())),
         begin: begin,
         end: end,
-        batchSize: batchSize,
+        batchSize: c.Miner.BatchSize,
     }
     w.changec = sync.NewCond(w.mutex)
     log.Printf("Worker %p initialized: Seed=%d, Range=[%d, %d), BatchSize=%d.\n", w, w.rng.Uint32(), w.begin, w.end, w.batchSize)
@@ -71,6 +80,8 @@ func (w *SimpleMinerWorker) Working() bool {
 }
 
 func (w *SimpleMinerWorker) Mainloop() {
+    allowSoftWorking := w.config.Miner.EnableSoftWorking
+
     w.working = false
     var prefix string
     var suffix string
@@ -81,7 +92,7 @@ func (w *SimpleMinerWorker) Mainloop() {
 
         w.mutex.Lock()
 
-        if !w.working {
+        if !w.working && !w.softWorking {
             if !w.change {
                 w.changec.Wait()
             }
@@ -114,9 +125,19 @@ func (w *SimpleMinerWorker) Mainloop() {
                 succ := CheckHash(hash)
 
                 if succ {
-                    // We do not search for smaller solution.
-                    w.working = false
-                    w.master.OnWorkerSuccess(str, hash)
+                    if !w.softWorking {
+                        if allowSoftWorking {
+                            w.softWorking = true
+                        }
+
+                        w.working = false
+                        w.master.OnWorkerSuccess(str, hash)
+                    } else {
+                        if hash < w.master.GetLatestBlock().Hash {
+                            w.master.OnWorkerSuccess(str, hash)
+                        }
+                    }
+
                     break
                 }
 

@@ -46,6 +46,7 @@ type MinerConfig struct {
     NrWorkers int
     EnableSelfLatestCheating bool
     EnableComputationIdle bool
+    EnableSoftWorking bool
     BatchSize int
 
     HonestMinerConfig *HonestMinerConfig
@@ -126,6 +127,7 @@ func NewServerConfig(configFilename string, selfID string) (config *ServerConfig
         NrWorkers: 8,
         EnableSelfLatestCheating: true,
         EnableComputationIdle: false,
+        EnableSoftWorking: true,
         BatchSize: 512,
 
         HonestMinerConfig : &HonestMinerConfig {
@@ -168,6 +170,7 @@ func (config *ServerConfig) Verbose() {
     log.Printf("- NrWorkers: %d\n", config.Miner.NrWorkers)
     log.Printf("- EnableSelfLatestCheating: %v\n", config.Miner.EnableSelfLatestCheating)
     log.Printf("- EnableComputationIdle: %v\n", config.Miner.EnableComputationIdle)
+    log.Printf("- EnableSoftWorking: %v\n", config.Miner.EnableSoftWorking)
     log.Printf("- BatchSize: %d\n", config.Miner.BatchSize)
     log.Printf("- HonestMinerConfig.IncomingWait: %d ms\n", config.Miner.HonestMinerConfig.IncomingWait / time.Millisecond)
     log.Printf("- HonestMinerConfig.MaxIncomingProcess: %d\n", config.Miner.HonestMinerConfig.MaxIncomingProcess)
