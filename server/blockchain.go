@@ -6,9 +6,13 @@ import (
     "fmt"
     "strings"
     "strconv"
+    "bufio"
+    "path"
+    "os"
 
     pb "../protobuf/go"
     "github.com/golang/protobuf/jsonpb"
+    "github.com/golang/protobuf/proto"
 )
 
 const VerifyBlockInfo_TIdentical_Thresh = 10
@@ -56,7 +60,11 @@ type BlockChain struct {
     UserMutex         *sync.RWMutex
     TransactionMutex  *sync.RWMutex
 
+    inTransactionRecovery bool
+    inBlockRecovery bool
+
     defaultUserInfo   *UserInfo
+    transactionWriter *bufio.Writer
 }
 
 func NewBlockChain(c *ServerConfig, p2pc *P2PClient) (bc *BlockChain) {
@@ -81,12 +89,70 @@ func NewBlockChain(c *ServerConfig, p2pc *P2PClient) (bc *BlockChain) {
         BlockMutex: &sync.RWMutex{},
         UserMutex: &sync.RWMutex{},
         TransactionMutex: &sync.RWMutex{},
+        inTransactionRecovery: false,
+        inBlockRecovery: false,
 
         defaultUserInfo: &UserInfo{Money: c.Common.DefaultMoney},
     }
 
     bc.Blocks[bc.LatestBlock.Hash] = bc.LatestBlock
+    bc.recover()
     return
+}
+
+func (bc *BlockChain) recover() {
+    bc.inTransactionRecovery = true
+    log.Printf("Start recovery.")
+
+    func () {
+        transactionFile, err := os.Open(bc.config.Self.TransactionFile)
+        if err == nil {
+            return
+        }
+        defer transactionFile.Close()
+        transactionReader := bufio.NewReader(transactionFile)
+
+        for {
+            bytes, eof, err := CRCLoadStream(transactionReader)
+            if eof || err != nil {
+                return
+            }
+
+            t := &pb.Transaction{}
+            err = proto.Unmarshal(bytes, t)
+            if err != nil {
+                continue
+            }
+
+            _ = bc.PushTransaction(t, true)
+        }
+    }()
+
+    bc.inTransactionRecovery = false
+
+    bc.inBlockRecovery = true
+
+    func () {
+        msg, err := CRCLoad(bc.config.Self.LatestBlockFile)
+        if err != nil {
+            return
+        }
+        json, err := CRCLoad(path.Join(bc.config.Self.BlockDirectory, msg + ".json"))
+        if err != nil {
+            return
+        }
+
+        _, _ = bc.PushBlockJson(json)
+    }()
+
+    bc.inBlockRecovery = false
+
+    transactionFile, err := os.OpenFile(bc.config.Self.TransactionFile, os.O_APPEND|os.O_WRONLY|os.O_CREATE, 0644)
+    if err == nil {
+        bc.transactionWriter = bufio.NewWriter(transactionFile)
+    }
+
+    log.Printf("Recovery ends.")
 }
 
 // Public methods: block
@@ -185,9 +251,9 @@ func (bc *BlockChain) PushTransaction(t *pb.Transaction, needVerifyInfo bool) bo
     //     return 0
     // }
 
-    bc.PendingTransactions.Add(t)
     bc.AllTransactions[t.UUID] = t
-    return true
+    ok := bc.addPendingTransaction(t)
+    return ok
 }
 
 func (bc *BlockChain) VerifyTransaction6(t *pb.Transaction) (rc int, hash string) {
@@ -277,16 +343,68 @@ func (bc *BlockChain) undoTransaction(t *pb.Transaction) (err error) {
     // Require: UserMutex, TransactionMutex.
     bc.setDefaultUserInfo(t.FromID).Money += t.Value
     bc.setDefaultUserInfo(t.ToID).Money -= t.Value - t.MiningFee
-    bc.PendingTransactions.Add(t)
+    bc.addPendingTransaction(t)
     return nil
 }
 
 // Private: Block
 
+func (bc *BlockChain) addPendingTransaction(t *pb.Transaction) bool {
+    if bc.PendingTransactions.Has(t) {
+        return true
+    }
+
+    diskDone := make(chan bool, 1)
+    if !bc.inTransactionRecovery {
+        go func () {
+            ok := func() bool {
+                if bc.transactionWriter == nil {
+                    return false
+                }
+
+                bytes, err := proto.Marshal(t)
+                if err != nil {
+                    return false
+                }
+
+                err = CRCSaveStream(bc.transactionWriter, bytes)
+                if err != nil {
+                    return false
+                }
+                err = bc.transactionWriter.Flush()
+                if err != nil {
+                    return false
+                }
+
+                return true
+            }()
+
+            diskDone <- ok
+        }()
+    }
+
+    bc.PendingTransactions.Add(t)
+
+    if !bc.inTransactionRecovery {
+        ok := <-diskDone
+        return ok
+    }
+
+    return true
+}
+
 func (bc *BlockChain) addBlock(bi *BlockInfo) {
     // Add a verified (info only, no transactions) into the database
     // Require BlockMutex
     // log.Printf("Add block: BlockID=%d, Hash=%s.\n", bi.Block.BlockID, bi.Hash)
+
+    diskDone := make(chan bool, 1)
+    if !bc.inTransactionRecovery {
+        go func () {
+            _ = CRCSave(path.Join(bc.config.Self.BlockDirectory, bi.Hash + ".json"), bi.Json)
+            diskDone <- true
+        }()
+    }
 
     bc.Blocks[bi.Hash] = bi
     for _, t := range bi.Block.Transactions {
@@ -297,6 +415,29 @@ func (bc *BlockChain) addBlock(bi *BlockInfo) {
         blocks = append(blocks, bi)
         bc.Trans2Blocks[t.UUID] = blocks
         bc.AllTransactions[t.UUID] = t
+    }
+
+    if !bc.inTransactionRecovery {
+        <-diskDone
+    }
+}
+
+func (bc *BlockChain) setLatestBlock(bi *BlockInfo) {
+    diskDone := make(chan bool, 1)
+    if !bc.inBlockRecovery {
+        go func () {
+            _ = CRCSave(path.Join(bc.config.Self.LatestBlockFile + ".tmp"), bi.Hash)
+            _ = os.Rename(bc.config.Self.LatestBlockFile + ".tmp", bc.config.Self.LatestBlockFile)
+            _ = os.Rename(bc.config.Self.LatestBlockFile + ".tmp.crc", bc.config.Self.LatestBlockFile + ".crc")
+
+            diskDone <- true
+        }()
+    }
+
+    bc.LatestBlock = bi
+
+    if !bc.inBlockRecovery {
+        <-diskDone
     }
 }
 
@@ -331,7 +472,7 @@ func (bc *BlockChain) refreshBlockChain(bi *BlockInfo) (latestChanged bool, err 
 func (bc *BlockChain) extendLatestBlock(bi *BlockInfo) (succ bool) {
     if err := bc.verifyBlockTransaction(bi); err == nil {
         bc.doBlock(bi)
-        bc.LatestBlock = bi
+        bc.setLatestBlock(bi)
         return true
     }
     return false
@@ -365,7 +506,7 @@ func (bc *BlockChain) switchLatestBlock(source *BlockInfo, target *BlockInfo) (s
         return
     }
 
-    bc.LatestBlock = target
+    bc.setLatestBlock(target)
     return true
 }
 
@@ -396,19 +537,17 @@ func (bc *BlockChain) switchLatestBlock_complete(bi *BlockInfo) (succ bool) {
             continue
         }
 
-        response := bc.p2pc.RemoteGetBlock(prev)
-        for {
-            msg := response.Get()
-            if msg == nil {
+        done := func () bool {
+            json, err := CRCLoad(path.Join(bc.config.Self.BlockDirectory, prev + ".json"))
+            if err != nil {
                 return false
             }
 
-            json := (msg.(*pb.JsonBlockString)).Json
             block := &pb.Block{}
-            err := jsonpb.UnmarshalString(json, block)
+            err = jsonpb.UnmarshalString(json, block)
 
             if err != nil {
-                continue
+                return false
             }
 
             newBi := &BlockInfo{
@@ -419,14 +558,51 @@ func (bc *BlockChain) switchLatestBlock_complete(bi *BlockInfo) (succ bool) {
             }
 
             if prev != newBi.Hash {
-                continue
+                return false
             }
 
             if err = bc.verifyBlockInfo(newBi); err == nil {
-                log.Printf("Completion succeeded on: %s (QUERY).", prev)
+                log.Printf("Completion succeeded on: %s (DISK).", prev)
                 bc.addBlock(newBi)
-                response.AcquireClose()
-                break
+                return true
+            }
+
+            return false
+        }()
+
+        if !done {
+            response := bc.p2pc.RemoteGetBlock(prev)
+            for {
+                msg := response.Get()
+                if msg == nil {
+                    return false
+                }
+
+                json := (msg.(*pb.JsonBlockString)).Json
+                block := &pb.Block{}
+                err := jsonpb.UnmarshalString(json, block)
+
+                if err != nil {
+                    continue
+                }
+
+                newBi := &BlockInfo{
+                    Json: json,
+                    Hash: GetHashString(json),
+                    Block: block,
+                    OnLongest: false,
+                }
+
+                if prev != newBi.Hash {
+                    continue
+                }
+
+                if err = bc.verifyBlockInfo(newBi); err == nil {
+                    log.Printf("Completion succeeded on: %s (QUERY).", prev)
+                    bc.addBlock(newBi)
+                    response.AcquireClose()
+                    break
+                }
             }
         }
 
@@ -507,9 +683,10 @@ func (bc *BlockChain) verifyBlockInfo_tidentical(bi *BlockInfo) bool {
     ts := bi.Block.Transactions
 
     if len(ts) <= VerifyBlockInfo_TIdentical_Thresh {
-        for _, s := range ts {
-            for _, t := range ts {
-                if s.UUID == t.UUID {
+        n := len(ts)
+        for i := 1; i < n; i++ {
+            for j := 0; j < i; j++ {
+                if ts[i].UUID == ts[j].UUID {
                     return false
                 }
             }

@@ -3,6 +3,8 @@ package main
 import (
     "encoding/json"
     "fmt"
+    "os"
+    "path"
     "io/ioutil"
     "log"
     "time"
@@ -17,6 +19,9 @@ type RemoteServerConfig struct {
     ID string
     Addr string
     DataDir string
+    BlockDirectory string
+    LatestBlockFile string
+    TransactionFile string
 }
 
 type P2PConfig struct {
@@ -83,6 +88,11 @@ func NewServerConfig(configFilename string, selfID string) (config *ServerConfig
         config.Servers = append(config.Servers, thisConfig)
         if serverID == selfID {
             config.Self = thisConfig
+            thisConfig.BlockDirectory = path.Join(thisConfig.DataDir, "Blocks")
+            thisConfig.LatestBlockFile = path.Join(thisConfig.DataDir, "Latest")
+            thisConfig.TransactionFile = path.Join(thisConfig.DataDir, "Transactions")
+
+            _ = os.MkdirAll(thisConfig.BlockDirectory, 0755)
         }
 
         // NOTE:: Make the correct ID here
