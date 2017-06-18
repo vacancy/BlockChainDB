@@ -174,7 +174,7 @@ func doTest(c pb.BlockChainMinerClient, cur int) (passed bool, err error) {
     res := 0
 
     //NOTE: This time should be adjust according to hardness, wait for the blocks to be computed.
-    sleepForBlock := 5000 * time.Millisecond 
+    sleepForBlock := 10000 * time.Millisecond 
 
     switch cur {
 

@@ -3,6 +3,7 @@ package main
 import (
     "container/heap"
 
+    "./queue"
     pb "../protobuf/go"
 )
 
@@ -33,10 +34,9 @@ type PriorityTransactionPool struct {
     Transactions map[string]*pb.Transaction
     MajorQueue *TPQ
     Succs []*pb.Transaction
-    Fails []*pb.Transaction
+    Fails *queue.Queue
 
     iterating int
-    failIndex int
 }
 
 func NewPriorityTransactionPool() *PriorityTransactionPool {
@@ -44,7 +44,7 @@ func NewPriorityTransactionPool() *PriorityTransactionPool {
         Transactions: make(map[string]*pb.Transaction),
         MajorQueue: &TPQ{},
         Succs: make([]*pb.Transaction, 0),
-        Fails: make([]*pb.Transaction, 0),
+        Fails: queue.New(),
     }
 }
 
@@ -69,7 +69,6 @@ func (p *PriorityTransactionPool) Has(t *pb.Transaction) bool {
 func (p *PriorityTransactionPool) BeginIter() {
     // Check it
     p.iterating = 0
-    p.failIndex = 0
 }
 
 func (p *PriorityTransactionPool) Next() (t *pb.Transaction) {
@@ -98,13 +97,12 @@ func (p *PriorityTransactionPool) MarkSucc(t *pb.Transaction) {
 
 func (p *PriorityTransactionPool) MarkFail(t *pb.Transaction) {
     // log.Printf("  Put fail tran: %s Value=%d.", t.FromID, t.Value)
-    p.Fails = append(p.Fails, t)
+    p.Fails.PushBack(t)
 }
 
 func (p *PriorityTransactionPool) maybeNext() (item *pb.Transaction) {
     if p.MajorQueue.Len() == 0 {
-        item = p.Fails[p.failIndex]
-        p.failIndex += 1
+        item = p.Fails.PopFront().(*pb.Transaction)
     } else {
         item = heap.Pop(p.MajorQueue).(*pb.Transaction)
     }
@@ -119,7 +117,6 @@ func (p *PriorityTransactionPool) EndIter() {
         heap.Push(p.MajorQueue, t)
     }
     p.Succs = make([]*pb.Transaction, 0)
-    p.Fails = p.Fails[p.failIndex:]
     // if p.failIndex == len(p.Fails) {
     //  for _, t := range p.Fails {
     //      heap.Push(p.MajorQueue, t)
