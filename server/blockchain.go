@@ -163,9 +163,10 @@ func (bc *BlockChain) PushTransaction(t *pb.Transaction, needVerifyInfo bool) bo
     bc.BlockMutex.RLock()
     defer bc.BlockMutex.RUnlock()
 
-    bc.TransactionMutex.RLock()
-    defer bc.TransactionMutex.RUnlock()
+    bc.TransactionMutex.Lock()
+    defer bc.TransactionMutex.Unlock()
 
+    // NOTE:: We still need to check this, since side-chain transactions may not appear in PendingTransactions.
     if err := bc.verifyTransactionExist(t); err != nil {
         return false
     }
@@ -199,18 +200,22 @@ func (bc *BlockChain) VerifyTransaction6(t *pb.Transaction) (rc int, hash string
 
     if blocks, ok := bc.Trans2Blocks[t.UUID]; ok {
         for _, block := range blocks {
-            if block.OnLongest && block.Block.BlockID >= bc.LatestBlock.Block.BlockID - 6 {
-                return 2, block.Hash
+            if block.OnLongest {
+                if block.Block.BlockID >= bc.LatestBlock.Block.BlockID - 6 {
+                    return 2, block.Hash
+                } else {
+                    return 1, block.Hash
+                }
             }
         }
-        return 1, blocks[0].Hash
     }
 
-    // TODO:: what about the transactions in PendingTransactions
-    // TODO(IMPORTANT)::
+    // the transactions in PendingTransactions
+    if _, ok := bc.PendingTransactions[t.UUID]; ok {
+        return 1, "!"
+    }
 
-    // TODO:: implement checking of side-chain
-    // TODO(FUCK)::
+    // NOTE:: ignore the block in side-chain
 
     return 0, "?"
 }
@@ -335,8 +340,7 @@ func (bc *BlockChain) switchLatestBlock(source *BlockInfo, target *BlockInfo) (s
 
     z := bc.findBlockLCA(x, y)
 
-    // TODO:: delete invalid block
-    // NOTE(MJY):: Need undo "Trans2Blocks" too.
+    // NOTE:: Keep the invalid blocks.
 
     undos := make([]*BlockInfo, 0)
     for x != z {
@@ -462,15 +466,22 @@ func (bc *BlockChain) verifyBlockInfo(bi *BlockInfo) (err error) {
         return fmt.Errorf("Verify block failed, invalid hash: %s.", bi.Hash)
     }
 
+    b := bi.Block
     // Check hex
-    if !CheckNonce(bi.Block.Nonce) {
-        return fmt.Errorf("Verify block failed, invalid nonce: %s.", bi.Block.Nonce)
+    if !CheckNonce(b.Nonce) {
+        return fmt.Errorf("Verify block failed, invalid nonce: %s.", b.Nonce)
     }
 
-    // TODO:: Check minerid, etc.
+    if len(b.MinerID) != 8 || b.MinerID[0:6] != "Server" {
+        return fmt.Errorf("Verify block failed, invalid miner ID: %s.", b.MinerID)
+    }
+
+    if len(b.Transactions) > 50 {
+        return fmt.Errorf("Verify block failed, too many transactions: %d > 50.", len(b.Transactions))
+    }
 
     // Check basic transaction info
-    for _, t := range bi.Block.Transactions {
+    for _, t := range b.Transactions {
         if err = bc.verifyTransactionInfo(t); err != nil {
             return err
         }
@@ -512,11 +523,17 @@ func (bc *BlockChain) verifyBlockTransaction(bi *BlockInfo) (err error) {
 func (bc *BlockChain) verifyTransactionInfo(t *pb.Transaction) (err error) {
     // Return nil when succeed.
 
-    // TODO:: check len(userid) == 8
-    // TODO:: check from != to
-
     if t.Type != pb.Transaction_TRANSFER {
         return fmt.Errorf("Verify transaction failed, unsupported type: %s.", t.Type)
+    }
+    if len(t.FromID) != 8 {
+        return fmt.Errorf("Verify transaction failed, invalid FromID: %s.", t.FromID)
+    }
+    if len(t.ToID) != 8 {
+        return fmt.Errorf("Verify transaction failed, invalid ToID: %s.", t.ToID)
+    }
+    if t.FromID == t.ToID {
+        return fmt.Errorf("Verify transaction failed, same FromID and ToID: %s, %s.", t.FromID, t.ToID)
     }
     if t.MiningFee <= 0 {
         return fmt.Errorf("Verify transaction failed, non-positive mining fee: %d", t.MiningFee)
