@@ -227,6 +227,7 @@ func (bc *BlockChain) PushTransaction(t *pb.Transaction, needVerifyInfo bool) bo
 
     if (needVerifyInfo) {
         if err := bc.verifyTransactionInfo(t); err != nil {
+            log.Fatalf("PushTransaction: %v", err)
             return false
         }
     }
@@ -239,6 +240,7 @@ func (bc *BlockChain) PushTransaction(t *pb.Transaction, needVerifyInfo bool) bo
 
     // NOTE:: We still need to check this, since side-chain transactions may not appear in PendingTransactions.
     if err := bc.verifyTransactionExist(t); err != nil {
+        log.Fatalf("PushTransaction: %v", err)
         return false
     }
 
@@ -387,6 +389,7 @@ func (bc *BlockChain) addPendingTransaction(t *pb.Transaction) bool {
 
     if !bc.inTransactionRecovery {
         ok := <-diskDone
+        log.Fatalf("addPendingTransaction: disk failed.")
         return ok
     }
 

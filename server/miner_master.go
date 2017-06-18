@@ -135,6 +135,7 @@ func (m *HonestMinerMaster) OnClientTransactionAsync(t *pb.Transaction) bool {
         msg := res.Get()
         res.IgnoreLater()
         if msg == nil {
+            log.Printf("FUCKKKKKKKKKK: %s.", msg)
             return false
         }
     }
