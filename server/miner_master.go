@@ -6,6 +6,7 @@ import (
     "time"
     "strings"
     "sync"
+    "math/rand"
 
     pb "../protobuf/go"
     "github.com/golang/protobuf/jsonpb"
@@ -142,8 +143,7 @@ func (m *HonestMinerMaster) OnTransactionAsync(t *pb.Transaction) {
 func (m *HonestMinerMaster) OnBlockAsync(json string) {
     lastChanged, _ := m.BC.PushBlockJson(json)
     if lastChanged {
-        // TODO:: Accelerate the selection
-        // First, test whether the current working block is valid or not.
+        // TODO:: First, test whether the current working block is valid or not.
         m.updateWorkingSet(true)
     }
 }
@@ -219,15 +219,41 @@ func (m *HonestMinerMaster) updateWorkingSetInternal(forceUpdate bool) bool {
 
     nrProcessed := 0
     nrMaxProcessed := m.config.Miner.HonestMinerConfig.MaxIncomingProcess
-    for _, trans := range m.BC.PendingTransactions {
-        if st.TestAndDo(trans) {
-            validTransactions = append(validTransactions, trans)
-        }
-        nrProcessed += 1
+    strategy := rand.Intn(2)
 
-        // TODO:: config: 100, 50
-        if (len(validTransactions) > 0 && nrProcessed > nrMaxProcessed) || len(validTransactions) == m.config.Common.MaxBlockSize {
-            break
+    if strategy == 0 || true {
+        pt := m.BC.PendingTransactions
+        pt.BeginIter()
+        for {
+            trans := pt.Next()
+            if trans == nil {
+                break
+            }
+
+            if st.TestAndDo(trans) {
+                validTransactions = append(validTransactions, trans)
+                pt.MarkSucc(trans)
+            } else {
+                pt.MarkFail(trans)
+            }
+            nrProcessed += 1
+
+            // TODO:: config: 100, 50
+            if (len(validTransactions) > 0 && nrProcessed > nrMaxProcessed) || len(validTransactions) == m.config.Common.MaxBlockSize {
+                break
+            }
+        }
+        pt.EndIter()
+    } else {
+        for _, trans := range m.BC.PendingTransactions.Transactions {
+            if st.TestAndDo(trans) {
+                validTransactions = append(validTransactions, trans)
+            }
+            nrProcessed += 1
+
+            if (len(validTransactions) > 0 && nrProcessed > nrMaxProcessed) || len(validTransactions) == m.config.Common.MaxBlockSize {
+                break
+            }
         }
     }
 

@@ -10,6 +10,8 @@ import (
     "github.com/golang/protobuf/jsonpb"
 )
 
+const VerifyBlockInfo_TIdentical_Thresh = 10
+
 type UserInfo struct {
     Money int32
 }
@@ -33,7 +35,7 @@ type BlockChain struct {
     Trans2Blocks map[string][]*BlockInfo
 
     // NOTE:: Owned by TransactionMutex
-    PendingTransactions map[string]*pb.Transaction
+    PendingTransactions *PriorityTransactionPool
     AllTransactions map[string]*pb.Transaction
 
     // UserID -> money
@@ -69,7 +71,7 @@ func NewBlockChain(c *ServerConfig, p2pc *P2PClient) (bc *BlockChain) {
 
         Users: make(map[string]*UserInfo),
 
-        PendingTransactions: make(map[string]*pb.Transaction),
+        PendingTransactions: NewPriorityTransactionPool(),
         AllTransactions: make(map[string]*pb.Transaction),
 
         config: c,
@@ -182,7 +184,7 @@ func (bc *BlockChain) PushTransaction(t *pb.Transaction, needVerifyInfo bool) bo
     //     return 0
     // }
 
-    bc.PendingTransactions[t.UUID] = t
+    bc.PendingTransactions.Add(t)
     bc.AllTransactions[t.UUID] = t
     return true
 }
@@ -214,7 +216,7 @@ func (bc *BlockChain) VerifyTransaction6(t *pb.Transaction) (rc int, hash string
     }
 
     // the transactions in PendingTransactions
-    if _, ok := bc.PendingTransactions[t.UUID]; ok {
+    if bc.PendingTransactions.Has(t) {
         return 1, "!"
     }
 
@@ -266,7 +268,7 @@ func (bc *BlockChain) doTransaction(t *pb.Transaction) (err error) {
     // Require: UserMutex, TransactionMutex.
     bc.setDefaultUserInfo(t.FromID).Money -= t.Value
     bc.setDefaultUserInfo(t.ToID).Money += t.Value - t.MiningFee
-    delete(bc.PendingTransactions, t.UUID)
+    bc.PendingTransactions.Remove(t)
     return nil
 }
 
@@ -274,7 +276,7 @@ func (bc *BlockChain) undoTransaction(t *pb.Transaction) (err error) {
     // Require: UserMutex, TransactionMutex.
     bc.setDefaultUserInfo(t.FromID).Money += t.Value
     bc.setDefaultUserInfo(t.ToID).Money -= t.Value - t.MiningFee
-    bc.PendingTransactions[t.UUID] = t
+    bc.PendingTransactions.Add(t)
     return nil
 }
 
@@ -484,6 +486,10 @@ func (bc *BlockChain) verifyBlockInfo(bi *BlockInfo) (err error) {
         return fmt.Errorf("Verify block failed, too many transactions: %d > 50.", len(b.Transactions))
     }
 
+    if !bc.verifyBlockInfo_tidentical(bi) {
+        return fmt.Errorf("Verify block failed, repeated transactions.")
+    }
+
     // Check basic transaction info
     for _, t := range b.Transactions {
         if err = bc.verifyTransactionInfo(t); err != nil {
@@ -492,6 +498,30 @@ func (bc *BlockChain) verifyBlockInfo(bi *BlockInfo) (err error) {
     }
 
     return nil
+}
+
+func (bc *BlockChain) verifyBlockInfo_tidentical(bi *BlockInfo) bool {
+    ts := bi.Block.Transactions
+
+    if len(ts) <= VerifyBlockInfo_TIdentical_Thresh {
+        for _, s := range ts {
+            for _, t := range ts {
+                if s.UUID == t.UUID {
+                    return false
+                }
+            }
+        }
+        return true
+    } else {
+        has := make(map[string]bool)
+        for _, t := range ts {
+            if _, ok := has[t.UUID]; ok {
+                return false
+            }
+            has[t.UUID] = true
+        }
+        return true
+    }
 }
 
 func (bc *BlockChain) verifyBlockTransaction(bi *BlockInfo) (err error) {
@@ -570,7 +600,7 @@ func (bc *BlockChain) verifyTransactionExist(t *pb.Transaction) (err error) {
     // Return nil when succeed.
     // Require: BlockMutex.R, TransactionMutex.R
 
-    if _, ok := bc.PendingTransactions[t.UUID]; ok {
+    if bc.PendingTransactions.Has(t) {
         return fmt.Errorf("Verify transaction failed, transaction exists in pending queue: %s.", t.UUID)
     }
 
