@@ -123,7 +123,6 @@ func (p2pc *P2PClient) remoteRequestAsync(funcname string, req proto.Message,
                     continue
                 }
 
-                // TODO:: choose server sequence randomly
                 rc := p2pc.Clients[j]
                 if !rc.IsAlive {
                     finished[j] = true

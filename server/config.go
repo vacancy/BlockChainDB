@@ -83,7 +83,12 @@ func NewServerConfig(configFilename string, selfID string) (config *ServerConfig
         if serverID == selfID {
             config.Self = thisConfig
         }
+
+        // NOTE:: Make the correct ID here
+        thisConfig.ID = fmt.Sprintf("Server%02d", i)
     }
+
+    // TODO:: Make self directory here
 
     if config.Self == nil {
         err = fmt.Errorf("Unknwon server ID: %s.", selfID)
@@ -104,16 +109,16 @@ func NewServerConfig(configFilename string, selfID string) (config *ServerConfig
         NrWorkers: 8,
 
         HonestMinerConfig : &HonestMinerConfig {
-            IncomingWait: 100 * time.Millisecond,
+            IncomingWait: 30 * time.Millisecond,
         },
     }
 
     config.P2P = &P2PConfig {
         RequestParallel: 4,
-        RequestTimeout: 3000 * time.Millisecond,
+        RequestTimeout: 500 * time.Millisecond,
 
         PushParallel: 4,
-        PushTimeout: 3000 * time.Millisecond,
+        PushTimeout: 1000 * time.Millisecond,
         PushTrials: 3,
         PushRetryInterval: 3 * time.Second,
     }
@@ -136,7 +141,8 @@ func (config *ServerConfig) Verbose() {
 
     log.Println("Miner configuration")
     log.Printf("- MinerType: %s\n", config.Miner.MinerType)
-    log.Printf("- NrWorkers: %s\n", config.Miner.NrWorkers)
+    log.Printf("- NrWorkers: %d\n", config.Miner.NrWorkers)
+    log.Printf("- HonestMinerConfig.IncomingWait: %d ms\n", config.Miner.HonestMinerConfig.IncomingWait / time.Millisecond)
     log.Println("")
 
     log.Println("P2P configuration")

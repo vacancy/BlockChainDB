@@ -65,6 +65,7 @@ func (s *Server) PushTransaction(ctx context.Context, in *pb.Transaction) (*pb.N
 
 func (s *Server) Mainloop() (err error) {
     // Should start master here
+    s.Master.Start()
 
     // Bind to port
     lis, err := net.Listen("tcp", s.Config.Self.Addr)
