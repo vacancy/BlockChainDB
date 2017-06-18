@@ -449,6 +449,12 @@ func (bc *BlockChain) refreshBlockChain(bi *BlockInfo) (latestChanged bool, err 
     height := bc.LatestBlock.Block.BlockID
     latestChanged = b.BlockID > height || b.BlockID == height && bi.Hash < bc.LatestBlock.Hash
 
+    if latestChanged && bc.config.Miner.EnableSelfLatestCheating {
+        if b.BlockID == height && b.MinerID != bc.config.Self.ID && bc.LatestBlock.Block.MinerID == bc.config.Self.ID {
+            latestChanged = false
+        }
+    }
+
     if !latestChanged {
         log.Printf("!! LatestBlock change failed: %s. Prechecking failed.", bi.Hash)
         return

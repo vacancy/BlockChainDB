@@ -114,7 +114,7 @@ func (m *HonestMinerMaster) Start() {
 
     for i := 0; i < m.config.Miner.NrWorkers; i++ {
         log.Printf("Starting worker #%d", i)
-        w := NewSimpleMinerWorker(m, int64(rangeSize * i), int64(rangeSize * (i + 1)))
+        w := NewSimpleMinerWorker(m, int64(rangeSize * i), int64(rangeSize * (i + 1)), m.config.Miner.BatchSize)
         m.workers = append(m.workers, w)
         go w.Mainloop()
     }
@@ -160,6 +160,7 @@ func (m *HonestMinerMaster) OnWorkerSuccess(json string, hash string) {
     }
 }
 
+// TODO:: Whether to forward.
 func (m *HonestMinerMaster) processTransaction(t *pb.Transaction) bool {
     // TODO:: Flow control
 
@@ -199,7 +200,7 @@ func (m *HonestMinerMaster) updateWorkingSet(forceUpdate bool, allowSame bool) {
         return
     }
 
-    if forceUpdate {
+    if forceUpdate && m.config.Miner.EnableComputationIdle {
         // log.Printf("UpdateWorkingBlock: stopping workers.")
         for _, w := range m.workers {
             if w.Working() {

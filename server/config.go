@@ -44,6 +44,9 @@ type SnapshotConfig struct {
 type MinerConfig struct {
     MinerType string
     NrWorkers int
+    EnableSelfLatestCheating bool
+    EnableComputationIdle bool
+    BatchSize int
 
     HonestMinerConfig *HonestMinerConfig
 }
@@ -121,6 +124,9 @@ func NewServerConfig(configFilename string, selfID string) (config *ServerConfig
     config.Miner = &MinerConfig {
         MinerType: "Honest",
         NrWorkers: 8,
+        EnableSelfLatestCheating: true,
+        EnableComputationIdle: false,
+        BatchSize: 512,
 
         HonestMinerConfig : &HonestMinerConfig {
             IncomingWait: 30 * time.Millisecond,
@@ -160,6 +166,9 @@ func (config *ServerConfig) Verbose() {
     log.Println("Miner configuration")
     log.Printf("- MinerType: %s\n", config.Miner.MinerType)
     log.Printf("- NrWorkers: %d\n", config.Miner.NrWorkers)
+    log.Printf("- EnableSelfLatestCheating: %v\n", config.Miner.EnableSelfLatestCheating)
+    log.Printf("- EnableComputationIdle: %v\n", config.Miner.EnableComputationIdle)
+    log.Printf("- BatchSize: %d\n", config.Miner.BatchSize)
     log.Printf("- HonestMinerConfig.IncomingWait: %d ms\n", config.Miner.HonestMinerConfig.IncomingWait / time.Millisecond)
     log.Printf("- HonestMinerConfig.MaxIncomingProcess: %d\n", config.Miner.HonestMinerConfig.MaxIncomingProcess)
     log.Println("")
