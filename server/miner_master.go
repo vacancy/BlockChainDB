@@ -179,7 +179,7 @@ func (m *HonestMinerMaster) processTransaction(t *pb.Transaction) bool {
 }
 
 func (m *HonestMinerMaster) updateWorkingSet(forceUpdate bool) {
-    log.Printf("UpdateWorkingSet invoked, forceUpdate=%v.", forceUpdate)
+    // log.Printf("UpdateWorkingSet invoked, forceUpdate=%v.", forceUpdate)
 
     m.updateMutex.Lock()
     defer m.updateMutex.Unlock()
@@ -204,7 +204,7 @@ func (m *HonestMinerMaster) updateWorkingSet(forceUpdate bool) {
     }
 
     if forceUpdate {
-        log.Printf("UpdateWorkingBlock: stopping workers.")
+        // log.Printf("UpdateWorkingBlock: stopping workers.")
         for _, w := range m.workers {
             if w.Working() {
                 w.UpdateWorkingBlock("", "")
@@ -221,7 +221,6 @@ func (m *HonestMinerMaster) updateWorkingSetInternal(forceUpdate bool) bool {
 
     nrProcessed := 0
     for _, trans := range m.BC.PendingTransactions {
-
         if st.TestAndDo(trans) {
             validTransactions = append(validTransactions, trans)
         }
@@ -257,7 +256,7 @@ func (m *HonestMinerMaster) updateWorkingSetInternal(forceUpdate bool) bool {
         return false
     }
 
-    log.Printf("Updating working set: BlockID=%d.\nData=%s.", block.BlockID, json)
+    // log.Printf("Updating working set: BlockID=%d.\nData=%s.", block.BlockID, json)
 
     prefix, suffix := presuf[0], presuf[1]
     prefix = prefix + "\"Nonce\":\""

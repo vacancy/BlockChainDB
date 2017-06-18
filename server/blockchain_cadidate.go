@@ -87,7 +87,7 @@ func (st *BlockChainTStack) verifyTransaction(t *pb.Transaction) (ok bool) {
     if st.verifyRepeat {
         if blocks, ok := st.BC.Trans2Blocks[t.UUID]; ok {
             for _, block := range blocks {
-                if block.Valid6 {
+                if block.OnLongest {
                     return false
                 }
             }

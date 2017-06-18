@@ -24,9 +24,9 @@ func NewServer(config *ServerConfig) (s *Server, err error) {
     return
 }
 
-// Client-side database interface 
+// Client-side database interface
 func (s *Server) Get(ctx context.Context, in *pb.GetRequest) (*pb.GetResponse, error) {
-    log.Printf("On server.Get %s.", in.UserID)
+    // log.Printf("On server.Get %s.", in.UserID)
     u := s.Master.GetUserInfo(in.UserID)
     return &pb.GetResponse{Value: u.Money}, nil
 }
@@ -45,6 +45,7 @@ func (s *Server) Transfer(ctx context.Context, in *pb.Transaction) (*pb.BooleanR
 }
 
 func (s *Server) GetBlock(ctx context.Context, in *pb.GetBlockRequest) (*pb.JsonBlockString, error) {
+    // log.Printf("On server.GetBlock %s.", in.BlockHash)
     bi := s.Master.GetBlock(in.BlockHash)
     if bi != nil {
         return &pb.JsonBlockString{Json: bi.Json}, nil
@@ -57,7 +58,7 @@ func (s *Server) PushBlock(ctx context.Context, in *pb.JsonBlockString) (*pb.Nul
     return &pb.Null{}, nil
 }
 func (s *Server) PushTransaction(ctx context.Context, in *pb.Transaction) (*pb.Null, error) {
-    log.Printf("On server.Transaction %s.", in.UUID)
+    // log.Printf("On server.Transaction %s.", in.UUID)
     s.Master.OnTransactionAsync(in)
     return &pb.Null{}, nil
 }

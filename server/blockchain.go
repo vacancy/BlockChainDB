@@ -124,6 +124,10 @@ func (bc *BlockChain) pushBlockJsonInternal(json string, needVerifyInfo bool) (l
 
     log.Printf("Push block internal: Json=%s, Hash=%s.", json, bi.Hash)
 
+    if _, ok := bc.Blocks[bi.Hash]; ok {
+        return false, fmt.Errorf("Push block failed: block exist: %s.", bi.Hash)
+    }
+
     lastChanged = false
 
     // Return nil when succeed.
@@ -279,7 +283,7 @@ func (bc *BlockChain) undoTransaction(t *pb.Transaction) (err error) {
 func (bc *BlockChain) addBlock(bi *BlockInfo) {
     // Add a verified (info only, no transactions) into the database
     // Require BlockMutex
-    log.Printf("Add block: BlockID=%d, Hash=%s.\n", bi.Block.BlockID, bi.Hash)
+    // log.Printf("Add block: BlockID=%d, Hash=%s.\n", bi.Block.BlockID, bi.Hash)
 
     bc.Blocks[bi.Hash] = bi
     for _, trans := range bi.Block.Transactions {
@@ -380,13 +384,11 @@ func (bc *BlockChain) switchLatestBlock_complete(bi *BlockInfo) (succ bool) {
     for {
         prev := bi.Block.PrevHash
 
-        if len(prev) == 0 || bi.Block.OnLongest {
+        if len(prev) == 0 || bi.OnLongest {
             break
         }
 
-        log.Printf("Try to complete: %s.", prev)
         if _, ok := bc.Blocks[prev]; ok {
-            log.Printf("Completion succeeded on: %s (EXIST).", prev)
             bi = bc.Blocks[prev]
             continue
         }
@@ -395,7 +397,6 @@ func (bc *BlockChain) switchLatestBlock_complete(bi *BlockInfo) (succ bool) {
         for {
             msg := response.Get()
             if msg == nil {
-                log.Printf("Completion failed on: %s.\n", prev)
                 return false
             }
 
@@ -418,7 +419,7 @@ func (bc *BlockChain) switchLatestBlock_complete(bi *BlockInfo) (succ bool) {
                 continue
             }
 
-            if err = bc.verifyBlockInfo(newBi); err != nil {
+            if err = bc.verifyBlockInfo(newBi); err == nil {
                 log.Printf("Completion succeeded on: %s (QUERY).", prev)
                 bc.addBlock(newBi)
                 response.AcquireClose()

@@ -9,9 +9,9 @@ type P2PResponse struct {
     acquiredClose bool
 }
 
-func NewP2PResponse() (r *P2PResponse) {
+func NewP2PResponse(bufferSize int) (r *P2PResponse) {
     return &P2PResponse{
-        channel: make(chan proto.Message, 1),
+        channel: make(chan proto.Message, bufferSize),
         acquiredClose: false,
     }
 }
@@ -27,7 +27,7 @@ func (r *P2PResponse) AcquiredClose() bool {
 }
 
 func (r *P2PResponse) Close() {
-    close(r.channel)
+    r.channel <- nil
 }
 
 // Functions called by receiver
@@ -39,8 +39,8 @@ func (r *P2PResponse) AcquireClose() {
 func (r *P2PResponse) IgnoreLater() {
     go func() {
         for {
-            _, more := <-r.channel
-            if !more {
+            msg := <-r.channel
+            if msg == nil {
                 break
             }
         }
@@ -52,10 +52,9 @@ func (r *P2PResponse) Get() proto.Message {
         return nil
     }
 
-    msg, more := <-r.channel
-    if !more {
-        return nil
+    msg := <-r.channel
+    if msg == nil {
+        r.acquiredClose = true
     }
     return msg
 }
-

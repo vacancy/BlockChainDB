@@ -110,10 +110,10 @@ func NewServerConfig(configFilename string, selfID string) (config *ServerConfig
 
     config.P2P = &P2PConfig {
         RequestParallel: 4,
-        RequestTimeout: 100 * time.Millisecond,
+        RequestTimeout: 3000 * time.Millisecond,
 
         PushParallel: 4,
-        PushTimeout: 500 * time.Millisecond,
+        PushTimeout: 3000 * time.Millisecond,
         PushTrials: 3,
         PushRetryInterval: 3 * time.Second,
     }

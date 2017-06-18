@@ -85,6 +85,9 @@ func (p2pc *P2PClient) remoteRequestAsync(funcname string, req proto.Message,
         nrTrials int, retryInterval time.Duration) {
 
     nrClients := len(p2pc.Clients)
+    if nrThreads > nrClients {
+        nrThreads = nrClients
+    }
 
     dispatch := func (rc *RemoteClient, req proto.Message) (proto.Message, error) {
         var ctx context.Context
@@ -108,10 +111,9 @@ func (p2pc *P2PClient) remoteRequestAsync(funcname string, req proto.Message,
     done := make(chan bool, nrThreads)
     mapper := func (id int) {
         finished := make(map[int]bool)
-        total := int((nrClients - id) / nrThreads)
+        total := int((nrClients - id - 1) / nrThreads) + 1
 
         for t := 0; t < nrTrials; t++ {
-
             for j := id; j < nrClients; j += nrThreads {
                 if r.AcquiredClose() {
                     break
@@ -181,7 +183,7 @@ func (p2pc *P2PClient) remoteRequestAsync(funcname string, req proto.Message,
 
 func (p2pc *P2PClient) RemoteGetBlock(bid string) *P2PResponse {
     msg := &pb.GetBlockRequest{BlockHash: bid}
-    res := NewP2PResponse()
+    res := NewP2PResponse(p2pc.config.P2P.RequestParallel)
 
     p2pc.remoteRequestAsync("GetBlock", msg, res,
         p2pc.config.P2P.RequestParallel, p2pc.config.P2P.RequestTimeout,
@@ -192,7 +194,8 @@ func (p2pc *P2PClient) RemoteGetBlock(bid string) *P2PResponse {
 
 func (p2pc *P2PClient) RemotePushBlockAsync(block string) *P2PResponse {
     msg := &pb.JsonBlockString{Json: block}
-    res := NewP2PResponse()
+    // No buffer
+    res := NewP2PResponse(1)
 
     p2pc.remoteRequestAsync("PushBlock", msg, res,
         p2pc.config.P2P.PushParallel, p2pc.config.P2P.PushTimeout,
@@ -202,7 +205,7 @@ func (p2pc *P2PClient) RemotePushBlockAsync(block string) *P2PResponse {
 }
 
 func (p2pc *P2PClient) RemotePushTransactionAsync(msg *pb.Transaction) *P2PResponse {
-    res := NewP2PResponse()
+    res := NewP2PResponse(p2pc.config.P2P.PushParallel)
 
     p2pc.remoteRequestAsync("PushTransaction", msg, res,
         p2pc.config.P2P.PushParallel, p2pc.config.P2P.PushTimeout,
@@ -210,4 +213,3 @@ func (p2pc *P2PClient) RemotePushTransactionAsync(msg *pb.Transaction) *P2PRespo
 
     return res
 }
-
