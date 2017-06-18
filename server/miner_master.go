@@ -238,7 +238,6 @@ func (m *HonestMinerMaster) updateWorkingSetInternal(forceUpdate bool) bool {
             }
             nrProcessed += 1
 
-            // TODO:: config: 100, 50
             if (len(validTransactions) > 0 && nrProcessed > nrMaxProcessed) || len(validTransactions) == m.config.Common.MaxBlockSize {
                 break
             }
