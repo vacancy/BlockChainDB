@@ -117,10 +117,10 @@ func (p *PriorityTransactionPool) EndIter() {
 		heap.Push(p.MajorQueue, t)
 	}
 	p.Succs = make([]*pb.Transaction, 0)
-	if p.failIndex == len(p.Fails) {
-		for _, t := range p.Fails {
-			heap.Push(p.MajorQueue, t)
-		}
-		p.Fails = make([]*pb.Transaction, 0)
-	}
+	// if p.failIndex == len(p.Fails) {
+	// 	for _, t := range p.Fails {
+	// 		heap.Push(p.MajorQueue, t)
+	// 	}
+	// 	p.Fails = make([]*pb.Transaction, 0)
+	// }
 }
