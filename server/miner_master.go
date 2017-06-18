@@ -65,6 +65,7 @@ func NewMinerMaster(c *ServerConfig) (m MinerMaster, e error) {
             config: c,
             workers: make([]MinerWorker, 0),
             updateMutex: &sync.Mutex{},
+            currentWorking: nil,
         }
     default:
         e = fmt.Errorf("Invalid miner type: %s", c.Miner.MinerType)
@@ -98,6 +99,7 @@ type HonestMinerMaster struct {
     config   *ServerConfig
     workers []MinerWorker
     updateMutex *sync.Mutex
+    currentWorking *pb.Block
 }
 
 func (m *HonestMinerMaster) Recover() (err error) {
@@ -143,8 +145,7 @@ func (m *HonestMinerMaster) OnTransactionAsync(t *pb.Transaction) {
 func (m *HonestMinerMaster) OnBlockAsync(json string) {
     lastChanged, _ := m.BC.PushBlockJson(json)
     if lastChanged {
-        // TODO:: First, test whether the current working block is valid or not.
-        m.updateWorkingSet(true)
+        m.updateWorkingSet(true, true)
     }
 }
 
@@ -153,7 +154,7 @@ func (m *HonestMinerMaster) OnWorkerSuccess(json string, hash string) {
     if err == nil {
         log.Printf("!! Mined: hash=%s.", hash)
         _ = m.P2PC.RemotePushBlockAsync(json)
-        m.updateWorkingSet(true)
+        m.updateWorkingSet(true, false)
     } else {
         log.Printf("Got invalid declaration: %s.", json)
     }
@@ -168,12 +169,12 @@ func (m *HonestMinerMaster) processTransaction(t *pb.Transaction) bool {
     }
 
     // Passed check
-    m.updateWorkingSet(false)
+    m.updateWorkingSet(false, false)
 
     return true
 }
 
-func (m *HonestMinerMaster) updateWorkingSet(forceUpdate bool) {
+func (m *HonestMinerMaster) updateWorkingSet(forceUpdate bool, allowSame bool) {
     // log.Printf("UpdateWorkingSet invoked, forceUpdate=%v.", forceUpdate)
 
     m.updateMutex.Lock()
@@ -194,7 +195,7 @@ func (m *HonestMinerMaster) updateWorkingSet(forceUpdate bool) {
         }
     }
 
-    if m.updateWorkingSetInternal(forceUpdate) {
+    if m.updateWorkingSetInternal(forceUpdate, allowSame) {
         return
     }
 
@@ -208,7 +209,29 @@ func (m *HonestMinerMaster) updateWorkingSet(forceUpdate bool) {
     }
 }
 
-func (m *HonestMinerMaster) updateWorkingSetInternal(forceUpdate bool) bool {
+func (m *HonestMinerMaster) updateWorkingSetInternal(forceUpdate bool, allowSame bool) bool {
+    if allowSame {
+        // Test whether the current working set is still available.
+        if m.currentWorking != nil {
+            ok := func() bool {
+                st := NewBlockChainTStack(m.BC, true, true)
+                defer st.Close()
+
+                for _, t := range m.currentWorking.Transactions {
+                    if !st.TestAndDo(t) {
+                        return false
+                    }
+                }
+
+                return true
+            }()
+
+            if ok {
+                return true
+            }
+        }
+    }
+
     // Sleep for a little while for several incoming messages.
     time.Sleep(m.config.Miner.HonestMinerConfig.IncomingWait)
 
@@ -221,6 +244,7 @@ func (m *HonestMinerMaster) updateWorkingSetInternal(forceUpdate bool) bool {
     nrMaxProcessed := m.config.Miner.HonestMinerConfig.MaxIncomingProcess
     strategy := rand.Intn(2)
 
+    // TODO:: Remove this requirements
     if strategy == 0 || true {
         pt := m.BC.PendingTransactions
         pt.BeginIter()
@@ -268,6 +292,7 @@ func (m *HonestMinerMaster) updateWorkingSetInternal(forceUpdate bool) bool {
         MinerID: m.config.Self.ID,
         Nonce: "00000000",
     }
+    m.currentWorking = block
 
     json, err := m.jsonMarshaler.MarshalToString(block)
     if err != nil {

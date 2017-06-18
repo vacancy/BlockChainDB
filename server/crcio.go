@@ -89,4 +89,3 @@ func CRCLoadStream(r io.Reader) (msg []byte, haveEOF bool, err error) {
     }
     return
 }
-
