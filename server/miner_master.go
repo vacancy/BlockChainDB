@@ -299,6 +299,26 @@ func (m *HonestMinerMaster) updateWorkingSetInternal(forceUpdate bool, allowSame
                 }
             }
         }
+
+        if m.config.Miner.WorkingSetExtraTest > 0 && (
+                len(validTransactions) > 0 && len(validTransactions) < m.config.Common.MaxBlockSize) {
+
+            func () {
+                nrProcessed := 0
+                for {
+                    for _, trans := range m.BC.PendingTransactions.Transactions {
+                        if st.TestAndDo(trans) {
+                            validTransactions = append(validTransactions, trans)
+                        }
+                        nrProcessed += 1
+
+                        if (nrProcessed >= m.config.Miner.WorkingSetExtraTest) || len(validTransactions) == m.config.Common.MaxBlockSize {
+                            return
+                        }
+                    }
+                }
+            }()
+        }
     }
 
     if len(validTransactions) == 0 {
