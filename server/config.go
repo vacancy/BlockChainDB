@@ -138,7 +138,7 @@ func NewServerConfig(configFilename string, selfID string) (config *ServerConfig
 
         BatchSize: 256,
         WorkingSetStrategy: 1, // 0=Naive, 1=Heuristic, 2=Mixed
-        WorkingSetExtraTest: 0,
+        WorkingSetExtraTest: 1000,
 
         HonestMinerConfig : &HonestMinerConfig {
             IncomingWait: 30 * time.Millisecond,

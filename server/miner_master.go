@@ -305,16 +305,28 @@ func (m *HonestMinerMaster) updateWorkingSetInternal(forceUpdate bool, allowSame
 
             func () {
                 nrProcessed := 0
+                alreadyValid := make(map[string]bool)
+
+                for _, t := range validTransactions {
+                    alreadyValid[t.UUID] = true
+                }
+
                 for {
                     for _, trans := range m.BC.PendingTransactions.Transactions {
-                        if st.TestAndDo(trans) {
-                            validTransactions = append(validTransactions, trans)
-                        }
                         nrProcessed += 1
 
                         if (nrProcessed >= m.config.Miner.WorkingSetExtraTest) || len(validTransactions) == m.config.Common.MaxBlockSize {
                             return
                         }
+
+                        if _, ok := alreadyValid[trans.UUID]; ok {
+                            continue
+                        }
+                        if st.TestAndDo(trans) {
+                            validTransactions = append(validTransactions, trans)
+                            alreadyValid[trans.UUID] = true
+                        }
+
                     }
                 }
             }()
