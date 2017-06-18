@@ -43,7 +43,7 @@ func UUID128bit() string {
     // this make sure that the 13th character is "4"
     u[6] = (u[6] | 0x40) & 0x4F
     // this make sure that the 17th is "8", "9", "a", or "b"
-    u[8] = (u[8] | 0x80) & 0xBF 
+    u[8] = (u[8] | 0x80) & 0xBF
     return fmt.Sprintf("%x", u)
 }
 
@@ -174,7 +174,7 @@ func doTest(c pb.BlockChainMinerClient, cur int) (passed bool, err error) {
     res := 0
 
     //NOTE: This time should be adjust according to hardness, wait for the blocks to be computed.
-    sleepForBlock := 10000 * time.Millisecond 
+    sleepForBlock := 5000 * time.Millisecond
 
     switch cur {
 
@@ -280,7 +280,7 @@ func doTest(c pb.BlockChainMinerClient, cur int) (passed bool, err error) {
         if err != nil || succ {
             return
         }
-    
+
     case 4:
         log.Printf("Check transfer (FAKE User ID)")
         _, succ, err = Transfer(c, "FAKE00", "T04U0001", 10, 5)
@@ -302,7 +302,7 @@ func doTest(c pb.BlockChainMinerClient, cur int) (passed bool, err error) {
             return
         }
 
-    case 6: 
+    case 6:
         log.Printf("Check transfer (multi -> one)")
         for i := 0; i < 10; i ++ {
             FromID := fmt.Sprintf("T06U00%02d", i)
@@ -336,7 +336,7 @@ func doTest(c pb.BlockChainMinerClient, cur int) (passed bool, err error) {
             return
         }
 
-    case 7: 
+    case 7:
         log.Printf("Check transfer (valid later)")
         _, succ, err = Transfer(c, "T07U0000", "T07U9999", 10, 5)
         log.Printf("Expected return: true")
@@ -467,7 +467,7 @@ func doTest(c pb.BlockChainMinerClient, cur int) (passed bool, err error) {
                 return
             }
         }
-    
+
 
     case 9:
         log.Printf("Check block (incorrect BlockID)")
@@ -484,7 +484,7 @@ func doTest(c pb.BlockChainMinerClient, cur int) (passed bool, err error) {
         blockID += 1
         root = hashRes
         err = PushBlock(c, json)
-        
+
         time.Sleep(sleepForBlock)
 
         ret, err := GetBlock(c, hashRes)
@@ -515,7 +515,7 @@ func doTest(c pb.BlockChainMinerClient, cur int) (passed bool, err error) {
         if err != nil {
             return false, err
         }
-        
+
         time.Sleep(sleepForBlock)
 
         ret, err := GetBlock(c, hashRes)
