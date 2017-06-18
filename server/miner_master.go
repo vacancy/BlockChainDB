@@ -302,6 +302,7 @@ func (m *HonestMinerMaster) updateWorkingSetInternal(forceUpdate bool, allowSame
     }
 
     if len(validTransactions) == 0 {
+        // log.Printf("Working set update fails.")
         return false
     }
 
@@ -326,7 +327,7 @@ func (m *HonestMinerMaster) updateWorkingSetInternal(forceUpdate bool, allowSame
         return false
     }
 
-    // log.Printf("Updating working set: BlockID=%d.", block.BlockID)
+    // log.Printf("Updating working set: BlockID=%d, Block=%v.", block.BlockID, block)
 
     prefix, suffix := presuf[0], presuf[1]
     prefix = prefix + "\"Nonce\":\""

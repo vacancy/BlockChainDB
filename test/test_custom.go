@@ -178,6 +178,74 @@ func doTest(c pb.BlockChainMinerClient, cur int) (passed bool, err error) {
 
     switch cur {
 
+    case 0:
+        log.Printf("Check verify transaction (FAIL if invalid on longest branch)")
+        t1 := makeTrans("T00U0000", "T00U0001", 1000, 1)
+        t2 := makeTrans("T00U0000", "T00U0001", 2, 1)
+        t3 := makeTrans("T00U0000", "T00U0001", 2, 1)
+        t4 := makeTrans("T00U0001", "T00U0000", 2, 1)
+        trans2 := []*pb.Transaction{t2}
+        trans3 := []*pb.Transaction{t3}
+
+        root := strings.Repeat("0", 64)
+        blockID := 0
+        _, json, hashRes, err := makeBlock(blockID + 1, root, trans2, "Server01")
+        if err != nil {
+            return false, err
+        }
+        log.Printf("hash: %s", hashRes)
+        blockID += 1
+        root = hashRes
+
+        queryHash := hashRes
+
+        json3 := json
+        _, json3, hashRes, err = makeBlock(blockID + 1, root, trans3, "Server01")
+        if err != nil {
+            return false, err
+        }
+        log.Printf("hash: %s", hashRes)
+        blockID += 1
+        root = hashRes
+
+        err = PushTransaction(c, t1)
+        if err != nil {
+            return false, err
+        }
+        err = PushBlock(c, json)
+        if err != nil {
+            return false, err
+        }
+        err = PushBlock(c, json3)
+        if err != nil {
+            return false, err
+        }
+
+        time.Sleep(sleepForBlock)
+
+        res, err = Verify(c, t1)
+        if err != nil {
+            return false, err
+        }
+        if res != 0 {
+            log.Printf("incorrect VERIFY result, result: %d, expected: %d", res, 0)
+            return false, nil
+        }
+
+        ret, err := GetBlock(c, queryHash)
+        if err != nil {
+            return false, err
+        }
+        log.Printf("Expected return: %s", json)
+        if ret != json {
+            log.Printf("incorrect GET BLOCK result, result: %s, expected: %s", ret, json)
+            return false, nil
+        }
+
+        err = PushTransaction(c, t4)
+        if err != nil {
+            return false, err
+        }
 
     case 1:
         log.Printf("Check transfer (Value <= MiningFee)")
@@ -399,22 +467,23 @@ func doTest(c pb.BlockChainMinerClient, cur int) (passed bool, err error) {
                 return
             }
         }
+    
 
     case 9:
-        log.Printf("Check block (push block)")
+        log.Printf("Check block (incorrect BlockID)")
         t := makeTrans("T09U0000", "T09U0001", 5, 1)
         trans := []*pb.Transaction{t}
 
         root := strings.Repeat("0", 64)
         blockID := 0
-        _, json, hashRes, err := makeBlock(blockID + 1, root, trans, "Server01")
+        _, json, hashRes, err := makeBlock(blockID + 2, root, trans, "Server01")
         if err != nil {
             return false, err
         }
         log.Printf("hash: %s", hashRes)
         blockID += 1
         root = hashRes
-        PushBlock(c, json)
+        err = PushBlock(c, json)
         
         time.Sleep(sleepForBlock)
 
@@ -422,9 +491,9 @@ func doTest(c pb.BlockChainMinerClient, cur int) (passed bool, err error) {
         if err != nil {
             return false, err
         }
-        log.Printf("Expected return: %s", json)
-        if ret != json {
-            log.Printf("incorrect GET BLOCK result, result: %s, expected: %s", ret, json)
+        log.Printf("Expected return: ")
+        if ret == json {
+            log.Printf("incorrect GET BLOCK result, result: %s, expected: %s", ret, "")
             return false, nil
         }
 
@@ -442,7 +511,10 @@ func doTest(c pb.BlockChainMinerClient, cur int) (passed bool, err error) {
         log.Printf("hash: %s", hashRes)
         blockID += 1
         root = hashRes
-        PushBlock(c, json)
+        err = PushBlock(c, json)
+        if err != nil {
+            return false, err
+        }
         
         time.Sleep(sleepForBlock)
 
@@ -470,8 +542,11 @@ func doTest(c pb.BlockChainMinerClient, cur int) (passed bool, err error) {
         log.Printf("hash: %s", hashRes)
         blockID += 1
         root = hashRes
-        PushBlock(c, json)
-        
+        err = PushBlock(c, json)
+        if err != nil {
+            return false, err
+        }
+
         time.Sleep(sleepForBlock)
 
         ret, err := GetBlock(c, hashRes)
@@ -484,34 +559,6 @@ func doTest(c pb.BlockChainMinerClient, cur int) (passed bool, err error) {
             return false, nil
         }
 
-
-    case 12:
-        log.Printf("Check block (incorrect BlockID)")
-        t := makeTrans("T12U0000", "T12U0001", 5, 1)
-        trans := []*pb.Transaction{t}
-
-        root := strings.Repeat("0", 64)
-        blockID := 0
-        _, json, hashRes, err := makeBlock(blockID + 2, root, trans, "Server01")
-        if err != nil {
-            return false, err
-        }
-        log.Printf("hash: %s", hashRes)
-        blockID += 1
-        root = hashRes
-        PushBlock(c, json)
-        
-        time.Sleep(sleepForBlock)
-
-        ret, err := GetBlock(c, hashRes)
-        if err != nil {
-            return false, err
-        }
-        log.Printf("Expected return: ")
-        if ret == json {
-            log.Printf("incorrect GET BLOCK result, result: %s, expected: %s", ret, "")
-            return false, nil
-        }
 
     }
     passed = true
