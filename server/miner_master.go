@@ -148,7 +148,7 @@ func (m *HonestMinerMaster) OnTransactionAsync(t *pb.Transaction) {
 func (m *HonestMinerMaster) OnBlockAsync(json string) {
     lastChanged, _ := m.BC.PushBlockJson(json)
     if lastChanged {
-        m.updateWorkingSet(true, true)
+        m.updateWorkingSet(true, false)
     }
 }
 
@@ -159,7 +159,7 @@ func (m *HonestMinerMaster) OnWorkerSuccess(json string, hash string) {
         _ = m.P2PC.RemotePushBlockAsync(json)
         m.updateWorkingSet(true, false)
     } else {
-        log.Printf("Got invalid declaration: %s.", json)
+        log.Printf("Got invalid declaration: %s, %v.", json, err)
     }
 }
 
@@ -214,6 +214,10 @@ func (m *HonestMinerMaster) updateWorkingSet(forceUpdate bool, allowSame bool) {
 }
 
 func (m *HonestMinerMaster) updateWorkingSetInternal(forceUpdate bool, allowSame bool) bool {
+    // log.Printf("Updating working set invoked: ForceUpdate=%v AllowSame=%v.", forceUpdate, allowSame)
+
+    validTransactions := make([]*pb.Transaction, 0)
+
     if allowSame {
         // Test whether the current working set is still available.
         if m.currentWorking != nil {
@@ -231,55 +235,59 @@ func (m *HonestMinerMaster) updateWorkingSetInternal(forceUpdate bool, allowSame
             }()
 
             if ok {
-                return true
+                validTransactions = m.currentWorking.Transactions
             }
         }
     }
 
-    // Sleep for a little while for several incoming messages.
-    time.Sleep(m.config.Miner.HonestMinerConfig.IncomingWait)
 
-    st := NewBlockChainTStack(m.BC, true, true)
-    defer st.Close()
+    if len(validTransactions) == 0 {
+        // Sleep for a little while for several incoming messages.
+        time.Sleep(m.config.Miner.HonestMinerConfig.IncomingWait)
 
-    validTransactions := make([]*pb.Transaction, 0)
+        st := NewBlockChainTStack(m.BC, true, true)
+        defer st.Close()
 
-    nrProcessed := 0
-    nrMaxProcessed := m.config.Miner.HonestMinerConfig.MaxIncomingProcess
-    strategy := rand.Intn(2)
+        nrProcessed := 0
+        nrMaxProcessed := m.config.Miner.HonestMinerConfig.MaxIncomingProcess
 
-    // TODO:: Remove this requirements
-    if strategy == 0 || true {
-        pt := m.BC.PendingTransactions
-        pt.BeginIter()
-        for {
-            trans := pt.Next()
-            if trans == nil {
-                break
-            }
-
-            if st.TestAndDo(trans) {
-                validTransactions = append(validTransactions, trans)
-                pt.MarkSucc(trans)
-            } else {
-                pt.MarkFail(trans)
-            }
-            nrProcessed += 1
-
-            if (len(validTransactions) > 0 && nrProcessed > nrMaxProcessed) || len(validTransactions) == m.config.Common.MaxBlockSize {
-                break
-            }
+        strategy := m.config.Miner.WorkingSetStrategy
+        if strategy == 2 {
+            strategy = rand.Intn(2)
         }
-        pt.EndIter()
-    } else {
-        for _, trans := range m.BC.PendingTransactions.Transactions {
-            if st.TestAndDo(trans) {
-                validTransactions = append(validTransactions, trans)
-            }
-            nrProcessed += 1
 
-            if (len(validTransactions) > 0 && nrProcessed > nrMaxProcessed) || len(validTransactions) == m.config.Common.MaxBlockSize {
-                break
+        if strategy == 1 {
+            pt := m.BC.PendingTransactions
+            pt.BeginIter()
+            for {
+                trans := pt.Next()
+                if trans == nil {
+                    break
+                }
+
+                if st.TestAndDo(trans) {
+                    validTransactions = append(validTransactions, trans)
+                    pt.MarkSucc(trans)
+                } else {
+                    pt.MarkFail(trans)
+                }
+                nrProcessed += 1
+
+                if (len(validTransactions) > 0 && nrProcessed > nrMaxProcessed) || len(validTransactions) == m.config.Common.MaxBlockSize {
+                    break
+                }
+            }
+            pt.EndIter()
+        } else {
+            for _, trans := range m.BC.PendingTransactions.Transactions {
+                if st.TestAndDo(trans) {
+                    validTransactions = append(validTransactions, trans)
+                }
+                nrProcessed += 1
+
+                if (len(validTransactions) > 0 && nrProcessed > nrMaxProcessed) || len(validTransactions) == m.config.Common.MaxBlockSize {
+                    break
+                }
             }
         }
     }

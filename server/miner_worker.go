@@ -83,6 +83,8 @@ func (w *SimpleMinerWorker) Mainloop() {
     allowSoftWorking := w.config.Miner.EnableSoftWorking
 
     w.working = false
+    w.softWorking = false
+
     var prefix string
     var suffix string
     var next int64 = 0
@@ -96,26 +98,27 @@ func (w *SimpleMinerWorker) Mainloop() {
             if !w.change {
                 w.changec.Wait()
             }
-            changed = true
-        } else {
-            changed = w.change
         }
+
+        changed = w.change
 
         if changed {
             w.working = true
+            w.softWorking = false
             prefix = w.prefix
             suffix = w.suffix
             next = w.begin
-        }
-        w.change = false
 
-        if len(prefix) == 0 && len(suffix) == 0 {
-            w.working = false
+            if len(prefix) == 0 && len(suffix) == 0 {
+                w.working = false
+            }
+
+            w.change = false
         }
 
         w.mutex.Unlock()
 
-        if w.working {
+        if w.working || w.softWorking {
             for i := 0; i <= w.batchSize; i++ {
                 // nonce := fmt.Sprintf("%08x", w.rng.Uint32())
                 nonce := fmt.Sprintf("%08x", next)
@@ -123,6 +126,7 @@ func (w *SimpleMinerWorker) Mainloop() {
                 str := strings.Join([]string{prefix, nonce, suffix}, "")
                 hash := GetHashString(str)
                 succ := CheckHash(hash)
+                next += 1
 
                 if succ {
                     if !w.softWorking {
@@ -134,14 +138,13 @@ func (w *SimpleMinerWorker) Mainloop() {
                         w.master.OnWorkerSuccess(str, hash)
                     } else {
                         if hash < w.master.GetLatestBlock().Hash {
+                            log.Printf("?? Found Hash=%s, Latest=%s.", hash, w.master.GetLatestBlock().Hash)
                             w.master.OnWorkerSuccess(str, hash)
                         }
                     }
 
                     break
                 }
-
-                next += 1
             }
 
             if next >= w.end {
