@@ -32,6 +32,9 @@ type P2PConfig struct {
     PushTimeout time.Duration
     PushTrials int
     PushRetryInterval time.Duration
+
+    PushBlockProbThresh int32
+    PushBlockProb float32
 }
 
 type SnapshotConfig struct {
@@ -41,6 +44,10 @@ type SnapshotConfig struct {
 type MinerConfig struct {
     MinerType string
     NrWorkers int
+    EnableSelfLatestCheating bool
+    EnableComputationIdle bool
+    EnableSoftWorking bool
+    BatchSize int
 
     HonestMinerConfig *HonestMinerConfig
 }
@@ -118,6 +125,10 @@ func NewServerConfig(configFilename string, selfID string) (config *ServerConfig
     config.Miner = &MinerConfig {
         MinerType: "Honest",
         NrWorkers: 8,
+        EnableSelfLatestCheating: true,
+        EnableComputationIdle: false,
+        EnableSoftWorking: true,
+        BatchSize: 512,
 
         HonestMinerConfig : &HonestMinerConfig {
             IncomingWait: 30 * time.Millisecond,
@@ -133,6 +144,9 @@ func NewServerConfig(configFilename string, selfID string) (config *ServerConfig
         PushTimeout: 1000 * time.Millisecond,
         PushTrials: 3,
         PushRetryInterval: 3 * time.Second,
+
+        PushBlockProbThresh: 10,
+        PushBlockProb: 0.5,
     }
 
     return
@@ -154,6 +168,10 @@ func (config *ServerConfig) Verbose() {
     log.Println("Miner configuration")
     log.Printf("- MinerType: %s\n", config.Miner.MinerType)
     log.Printf("- NrWorkers: %d\n", config.Miner.NrWorkers)
+    log.Printf("- EnableSelfLatestCheating: %v\n", config.Miner.EnableSelfLatestCheating)
+    log.Printf("- EnableComputationIdle: %v\n", config.Miner.EnableComputationIdle)
+    log.Printf("- EnableSoftWorking: %v\n", config.Miner.EnableSoftWorking)
+    log.Printf("- BatchSize: %d\n", config.Miner.BatchSize)
     log.Printf("- HonestMinerConfig.IncomingWait: %d ms\n", config.Miner.HonestMinerConfig.IncomingWait / time.Millisecond)
     log.Printf("- HonestMinerConfig.MaxIncomingProcess: %d\n", config.Miner.HonestMinerConfig.MaxIncomingProcess)
     log.Println("")
@@ -165,6 +183,8 @@ func (config *ServerConfig) Verbose() {
     log.Printf("- PushTimeout: %d ms\n", config.P2P.PushTimeout / time.Millisecond)
     log.Printf("- PushTrials: %d\n", config.P2P.PushTrials)
     log.Printf("- PushRetryInterval: %d s\n", config.P2P.PushRetryInterval / time.Second)
+    log.Printf("- PushBlockProbThresh: %d\n", config.P2P.PushBlockProbThresh)
+    log.Printf("- PushBlockProb: %f\n", config.P2P.PushBlockProb)
     log.Println("")
 
     log.Println("Self configuration")
