@@ -499,6 +499,10 @@ func (bc *BlockChain) verifyBlockTransaction(bi *BlockInfo) (err error) {
     // Return nil when succeed.
     // Require: BlockMutex.R, TransactionMutex.R, UserMutex.R
     b := bi.Block
+    prev := bc.Blocks[b.PrevHash]
+    if b.BlockID != prev.Block.BlockID + 1 {
+        return fmt.Errorf("Verify block failed, invalid BlockID: %d.", b.BlockID)
+    }
 
     // Check used transaction
     for _, t := range b.Transactions {
@@ -540,10 +544,10 @@ func (bc *BlockChain) verifyTransactionInfo(t *pb.Transaction) (err error) {
         return fmt.Errorf("Verify transaction failed, same FromID and ToID: %s, %s.", t.FromID, t.ToID)
     }
     if t.MiningFee <= 0 {
-        return fmt.Errorf("Verify transaction failed, non-positive mining fee: %d", t.MiningFee)
+        return fmt.Errorf("Verify transaction failed, non-positive mining fee: %d.", t.MiningFee)
     }
     if t.Value < 0 {
-        return fmt.Errorf("Verify transaction failed, negative value: %d", t.Value)
+        return fmt.Errorf("Verify transaction failed, negative value: %d.", t.Value)
     }
     if t.Value <= t.MiningFee {
         return fmt.Errorf("Verify transaction failed, insufficient value: %d, mining fee: %d.", t.Value, t.MiningFee)
