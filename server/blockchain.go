@@ -34,6 +34,7 @@ type BlockChain struct {
 
     // NOTE:: Owned by TransactionMutex
     PendingTransactions map[string]*pb.Transaction
+    AllTransactions map[string]*pb.Transaction
 
     // UserID -> money
     Users map[string]*UserInfo
@@ -69,6 +70,7 @@ func NewBlockChain(c *ServerConfig, p2pc *P2PClient) (bc *BlockChain) {
         Users: make(map[string]*UserInfo),
 
         PendingTransactions: make(map[string]*pb.Transaction),
+        AllTransactions: make(map[string]*pb.Transaction),
 
         config: c,
         p2pc: p2pc,
@@ -188,6 +190,7 @@ func (bc *BlockChain) PushTransaction(t *pb.Transaction, needVerifyInfo bool) (r
     // }
 
     bc.PendingTransactions[t.UUID] = t
+    bc.AllTransactions[t.UUID] = t
     return 1
 }
 
@@ -293,13 +296,14 @@ func (bc *BlockChain) addBlock(bi *BlockInfo) {
     // log.Printf("Add block: BlockID=%d, Hash=%s.\n", bi.Block.BlockID, bi.Hash)
 
     bc.Blocks[bi.Hash] = bi
-    for _, trans := range bi.Block.Transactions {
-        blocks := bc.Trans2Blocks[trans.UUID]
+    for _, t := range bi.Block.Transactions {
+        blocks := bc.Trans2Blocks[t.UUID]
         if blocks == nil {
             blocks = make([]*BlockInfo, 0)
         }
         blocks = append(blocks, bi)
-        bc.Trans2Blocks[trans.UUID] = blocks
+        bc.Trans2Blocks[t.UUID] = blocks
+        bc.AllTransactions[t.UUID] = t
     }
 }
 
