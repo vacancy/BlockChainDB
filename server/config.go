@@ -35,6 +35,8 @@ type P2PConfig struct {
 
     PushBlockProbThresh int32
     PushBlockProb float32
+
+    PollInterval time.Duration
 }
 
 type SnapshotConfig struct {
@@ -157,6 +159,8 @@ func NewServerConfig(configFilename string, selfID string) (config *ServerConfig
 
         PushBlockProbThresh: 10,
         PushBlockProb: 0.5,
+
+        PollInterval: 2 * time.Second,
     }
 
     return
@@ -198,6 +202,7 @@ func (config *ServerConfig) Verbose() {
     log.Printf("- PushRetryInterval: %d s\n", config.P2P.PushRetryInterval / time.Second)
     log.Printf("- PushBlockProbThresh: %d\n", config.P2P.PushBlockProbThresh)
     log.Printf("- PushBlockProb: %f\n", config.P2P.PushBlockProb)
+    log.Printf("- PollInterval: %d s\n", config.P2P.PollInterval / time.Second)
     log.Println("")
 
     log.Println("Self configuration")

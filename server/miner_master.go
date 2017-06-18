@@ -33,7 +33,6 @@ func (r *OnReceiveResponse) Wait() bool {
 }
 
 type MinerMaster interface {
-    Recover() error
     Start()
 
     // Client-side
@@ -100,11 +99,6 @@ type HonestMinerMaster struct {
     workers []MinerWorker
     updateMutex *sync.Mutex
     currentWorking *pb.Block
-}
-
-func (m *HonestMinerMaster) Recover() (err error) {
-    // TODO::
-    return nil
 }
 
 func (m *HonestMinerMaster) Start() {

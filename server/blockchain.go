@@ -159,7 +159,17 @@ func (bc *BlockChain) recover() {
         }
     }
 
+    for _, rc := range bc.p2pc.Clients {
+        rc.RecoverHook = bc.recoverHook
+    }
+
     log.Printf("Recovery ends.")
+}
+
+func (bc *BlockChain) recoverHook(height int32, hash string, json string) {
+    if height > bc.LatestBlock.Block.BlockID {
+        _, _ = bc.PushBlockJson(json)
+    }
 }
 
 // Public methods: block
