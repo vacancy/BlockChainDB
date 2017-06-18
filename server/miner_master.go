@@ -33,7 +33,7 @@ func (r *OnReceiveResponse) Wait() bool {
 
 type MinerMaster interface {
     Recover() error
-    Mainloop()
+    Start()
 
     // Client-side
     GetUserInfo(uid string) *UserInfo
@@ -50,12 +50,12 @@ type MinerMaster interface {
     OnWorkerSuccess(json string, hash string)
 }
 
-func NewMinerMaster(c *ServerConfig) (master MinerMaster, e error) {
+func NewMinerMaster(c *ServerConfig) (m MinerMaster, e error) {
     p2pc := NewP2PClient(c)
 
     switch c.Miner.MinerType {
     case "Honest":
-        m := &HonestMinerMaster{
+        m = &HonestMinerMaster{
             BaseMinerMaster: BaseMinerMaster{
                 BC: NewBlockChain(c, p2pc),
                 P2PC: p2pc,
@@ -65,17 +65,6 @@ func NewMinerMaster(c *ServerConfig) (master MinerMaster, e error) {
             workers: make([]MinerWorker, 0),
             updateMutex: &sync.Mutex{},
         }
-
-        // Start workers
-        for i := 0; i < m.config.Miner.NrWorkers; i++ {
-            log.Printf("Starting worker #%d", i)
-            w := NewSimpleMinerWorker(m)
-            m.workers = append(m.workers, w)
-            go w.Mainloop()
-        }
-
-        master = m
-
     default:
         e = fmt.Errorf("Invalid miner type: %s", c.Miner.MinerType)
     }
@@ -115,10 +104,13 @@ func (m *HonestMinerMaster) Recover() (err error) {
     return nil
 }
 
-func (m *HonestMinerMaster) Mainloop() {
-    for {
-        // Mainloop here
-        time.Sleep(1000)
+func (m *HonestMinerMaster) Start() {
+    // Start workers
+    for i := 0; i < m.config.Miner.NrWorkers; i++ {
+        log.Printf("Starting worker #%d", i)
+        w := NewSimpleMinerWorker(m)
+        m.workers = append(m.workers, w)
+        go w.Mainloop()
     }
 }
 
@@ -167,8 +159,8 @@ func (m *HonestMinerMaster) OnWorkerSuccess(json string, hash string) {
 func (m *HonestMinerMaster) processTransaction(t *pb.Transaction) bool {
     // TODO:: Flow control
 
-    rc := m.BC.PushTransaction(t, true)
-    if rc == 0 || rc == 2 {
+    ok := m.BC.PushTransaction(t, true)
+    if !ok {
         return false
     }
 
@@ -214,6 +206,9 @@ func (m *HonestMinerMaster) updateWorkingSet(forceUpdate bool) {
 }
 
 func (m *HonestMinerMaster) updateWorkingSetInternal(forceUpdate bool) bool {
+    // Sleep for a little while for several incoming messages.
+    time.Sleep(m.config.Miner.HonestMinerConfig.IncomingWait)
+
     st := NewBlockChainTStack(m.BC, true, true)
     defer st.Close()
 

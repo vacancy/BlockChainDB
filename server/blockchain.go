@@ -148,7 +148,7 @@ func (bc *BlockChain) pushBlockJsonInternal(json string, needVerifyInfo bool) (l
     return bc.refreshBlockChain(bi)
 }
 
-func (bc *BlockChain) PushTransaction(t *pb.Transaction, needVerifyInfo bool) (rc int) {
+func (bc *BlockChain) PushTransaction(t *pb.Transaction, needVerifyInfo bool) bool {
     // Verify transaction based on current info
     // RC: 0=fail, 1=ok, 2=already-in-current-chain
 
@@ -156,7 +156,7 @@ func (bc *BlockChain) PushTransaction(t *pb.Transaction, needVerifyInfo bool) (r
 
     if (needVerifyInfo) {
         if err := bc.verifyTransactionInfo(t); err != nil {
-            return 0
+            return false
         }
     }
 
@@ -166,19 +166,11 @@ func (bc *BlockChain) PushTransaction(t *pb.Transaction, needVerifyInfo bool) (r
     bc.TransactionMutex.RLock()
     defer bc.TransactionMutex.RUnlock()
 
-    if err := bc.verifyTransactionUUID(t); err != nil {
-        return 0
+    if err := bc.verifyTransactionExist(t); err != nil {
+        return false
     }
 
-    if _, ok := bc.PendingTransactions[t.UUID]; ok {
-        return 0
-    }
-
-    if err := bc.verifyTransactionRepeat(t); err != nil {
-        return 2
-    }
-
-    // TODO:: whether we need to verify or not
+    // NOTE:: We don't verify the money in the transaction here.
     // bc.UserMutex.RLock()
     // defer bc.UserMutex.RUnlock()
 
@@ -188,7 +180,7 @@ func (bc *BlockChain) PushTransaction(t *pb.Transaction, needVerifyInfo bool) (r
     // }
 
     bc.PendingTransactions[t.UUID] = t
-    return 1
+    return true
 }
 
 func (bc *BlockChain) VerifyTransaction6(t *pb.Transaction) (rc int, hash string) {
@@ -548,6 +540,22 @@ func (bc *BlockChain) verifyTransactionUUID(t *pb.Transaction) (err error) {
     return nil
 }
 
+func (bc *BlockChain) verifyTransactionExist(t *pb.Transaction) (err error) {
+    // Verify whether the transaction has already been received.
+    // Return nil when succeed.
+    // Require: BlockMutex.R, TransactionMutex.R
+
+    if _, ok := bc.PendingTransactions[t.UUID]; ok {
+        return fmt.Errorf("Verify transaction failed, transaction exists in pending queue: %s.", t.UUID)
+    }
+
+    if err = bc.verifyTransactionRepeat(t); err != nil {
+        return err
+    }
+
+    return nil
+}
+
 func (bc *BlockChain) verifyTransactionRepeat(t *pb.Transaction) (err error) {
     // Verify whether the transaction has already appeared on the current chain.
     // Return nil when succeed.
@@ -556,7 +564,7 @@ func (bc *BlockChain) verifyTransactionRepeat(t *pb.Transaction) (err error) {
     if blocks, ok := bc.Trans2Blocks[t.UUID]; ok {
         for _, block := range blocks {
             if block.OnLongest {
-                return fmt.Errorf("Verify block failed, transaction exists: %s.", t.UUID)
+                return fmt.Errorf("Verify transaction failed, transaction exists on longest: %s.", t.UUID)
             }
         }
     }
