@@ -128,7 +128,7 @@ func NewServerConfig(configFilename string, selfID string) (config *ServerConfig
 
     config.Miner = &MinerConfig {
         MinerType: "Honest",
-        NrWorkers: 2,
+        NrWorkers: 4,
 
         EnableSelfLatestCheating: true,
         EnableComputationIdle: false,
@@ -138,7 +138,7 @@ func NewServerConfig(configFilename string, selfID string) (config *ServerConfig
         // EnableComputationIdle: true,
         // EnableSoftWorking: false,
 
-        BatchSize: 256,
+        BatchSize: 128,
         WorkingSetStrategy: 1, // 0=Naive, 1=Heuristic, 2=Mixed
         WorkingSetExtraTest: 1000,
 
