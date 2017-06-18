@@ -111,7 +111,7 @@ func (m *HonestMinerMaster) Start() {
 
     for i := 0; i < m.config.Miner.NrWorkers; i++ {
         log.Printf("Starting worker #%d", i)
-        w := NewSimpleMinerWorker(m, rangeSize * i, rangeSize * (i + 1))
+        w := NewSimpleMinerWorker(m, int64(rangeSize * i), int64(rangeSize * (i + 1)))
         m.workers = append(m.workers, w)
         go w.Mainloop()
     }

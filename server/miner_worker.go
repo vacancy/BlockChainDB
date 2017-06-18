@@ -120,7 +120,7 @@ func (w *SimpleMinerWorker) Mainloop() {
                 next += 1
             }
 
-            if next >= end {
+            if next >= w.end {
                 // NOTE:: WTF???
                 w.working = false
             }
