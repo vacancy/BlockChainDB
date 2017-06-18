@@ -32,6 +32,9 @@ type P2PConfig struct {
     PushTimeout time.Duration
     PushTrials int
     PushRetryInterval time.Duration
+
+    PushBlockProbThresh int32
+    PushBlockProb float32
 }
 
 type SnapshotConfig struct {
@@ -133,6 +136,9 @@ func NewServerConfig(configFilename string, selfID string) (config *ServerConfig
         PushTimeout: 1000 * time.Millisecond,
         PushTrials: 3,
         PushRetryInterval: 3 * time.Second,
+
+        PushBlockProbThresh: 10,
+        PushBlockProb: 0.5,
     }
 
     return
@@ -165,6 +171,8 @@ func (config *ServerConfig) Verbose() {
     log.Printf("- PushTimeout: %d ms\n", config.P2P.PushTimeout / time.Millisecond)
     log.Printf("- PushTrials: %d\n", config.P2P.PushTrials)
     log.Printf("- PushRetryInterval: %d s\n", config.P2P.PushRetryInterval / time.Second)
+    log.Printf("- PushBlockProbThresh: %d\n", config.P2P.PushBlockProbThresh)
+    log.Printf("- PushBlockProb: %f\n", config.P2P.PushBlockProb)
     log.Println("")
 
     log.Println("Self configuration")
