@@ -35,10 +35,10 @@ func NewBlockChainTStack(bc *BlockChain, verifyRepeat bool, needLock bool) *Bloc
 
 func (st *BlockChainTStack) Close() {
     if st.needLock {
-        st.BC.UserMutex.RUnlock()
         if st.verifyRepeat {
             st.BC.BlockMutex.RUnlock()
         }
+        st.BC.UserMutex.RUnlock()
     }
 }
 

@@ -193,7 +193,7 @@ func (bc *BlockChain) VerifyTransaction6(t *pb.Transaction) (rc int, hash string
     defer bc.BlockMutex.RUnlock()
 
     bc.TransactionMutex.RLock()
-    defer bc.BlockMutex.RUnlock()
+    defer bc.TransactionMutex.RUnlock()
 
     if err := bc.verifyTransactionUUID(t); err != nil {
         return 0, "?"
@@ -490,12 +490,12 @@ func (bc *BlockChain) verifyBlockTransaction(bi *BlockInfo) (err error) {
 
     // Check Valid6ity
     stack := NewBlockChainTStack(bc, false, false)
+    defer stack.Close()
     for _, t := range b.Transactions {
         if !stack.TestAndDo(t) {
             return fmt.Errorf("Verify block failed, transaction amount inValid6: %s.", t.UUID)
         }
     }
-    stack.Close()
 
     return nil
 }

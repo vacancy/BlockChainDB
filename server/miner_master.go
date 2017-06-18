@@ -35,7 +35,7 @@ type MinerMaster interface {
     Recover() error
     Mainloop()
 
-    // Client-side 
+    // Client-side
     GetUserInfo(uid string) *UserInfo
     GetLatestBlock() *BlockInfo
     // transaction => return code, blockhash
@@ -111,7 +111,7 @@ type HonestMinerMaster struct {
 }
 
 func (m *HonestMinerMaster) Recover() (err error) {
-    // TODO:: 
+    // TODO::
     return nil
 }
 
@@ -249,4 +249,6 @@ func (m *HonestMinerMaster) updateWorkingSet(forceUpdate bool) {
             w.UpdateWorkingBlock(prefix, suffix)
         }
     }
+
+    // log.Printf("Updated working set.")
 }

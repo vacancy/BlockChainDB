@@ -15,28 +15,39 @@ type SimpleMinerWorker struct {
     master MinerMaster
     prefix string
     suffix string
-    change chan bool
+    change bool
+    changec *sync.Cond
     mutex *sync.Mutex
     working bool
 }
 
 func NewSimpleMinerWorker(m MinerMaster) (w *SimpleMinerWorker) {
-    return &SimpleMinerWorker{
+    w = &SimpleMinerWorker{
         master: m,
         prefix: "",
         suffix: "",
-        change: make(chan bool),
+        change: false,
         mutex: &sync.Mutex{},
     }
+    w.changec = sync.NewCond(w.mutex)
+    return
 }
 
 func (w *SimpleMinerWorker) UpdateWorkingBlock(prefix string, suffix string) {
+    // log.Printf("Updating working block inside worker.")
     w.mutex.Lock()
     defer w.mutex.Unlock()
 
+    // log.Printf("Updating working block inside worker: partial done.")
+
     w.prefix = prefix
     w.suffix = suffix
-    w.change <- true
+    if !w.change {
+        w.change = true
+        w.changec.Signal()
+    }
+
+    // log.Printf("Updating working block inside worker: done.")
 }
 
 func (w *SimpleMinerWorker) Working() bool {
@@ -51,40 +62,25 @@ func (w *SimpleMinerWorker) Mainloop() {
 
     for {
         changed := false
+
+        w.mutex.Lock()
+
         if !w.working {
-            changed = <-w.change
+            w.changec.Wait()
+            changed = true
         } else {
-            select {
-            case _ = <-w.change:
-                changed = true
-            default:
-                changed = false
-            }
+            changed = w.change
         }
 
         if changed {
             w.working = true
-
-            w.mutex.Lock()
-
-            // Remove all messages from the chan
-            (func() {
-                for {
-                    select {
-                    case _ = <-w.change:
-                        // pass
-                    default:
-                        return
-                    }
-                }
-            })()
-
             prefix = w.prefix
             suffix = w.suffix
-            w.mutex.Unlock()
-
             next = 0
         }
+        w.change = false
+
+        w.mutex.Unlock()
 
         if w.working {
             for i := 0; i <= 100; i++ {
