@@ -147,9 +147,16 @@ func (bc *BlockChain) recover() {
 
     bc.inBlockRecovery = false
 
-    transactionFile, err := os.OpenFile(bc.config.Self.TransactionFile, os.O_APPEND|os.O_WRONLY|os.O_CREATE, 0644)
-    if err == nil {
-        bc.transactionWriter = bufio.NewWriter(transactionFile)
+    if _, err := os.Stat(bc.config.Self.TransactionFile); os.IsExist(err) {
+        transactionFile, err := os.OpenFile(bc.config.Self.TransactionFile, os.O_APPEND|os.O_WRONLY, 0644)
+        if err == nil {
+            bc.transactionWriter = bufio.NewWriter(transactionFile)
+        }
+    } else {
+        transactionFile, err := os.OpenFile(bc.config.Self.TransactionFile, os.O_CREATE|os.O_WRONLY, 0644)
+        if err == nil {
+            bc.transactionWriter = bufio.NewWriter(transactionFile)
+        }
     }
 
     log.Printf("Recovery ends.")
@@ -193,11 +200,7 @@ func (bc *BlockChain) pushBlockJsonInternal(json string, needVerifyInfo bool) (l
         OnLongest: false,
     }
 
-    log.Printf("Push block internal: Json=%s, Hash=%s.", json, bi.Hash)
-
-    if _, ok := bc.Blocks[bi.Hash]; ok {
-        return false, fmt.Errorf("Push block failed: block exist: %s.", bi.Hash)
-    }
+    log.Printf("Push block internal: BlockID=%d, MinerID=%s, Hash=%s.", bi.Block.BlockID, bi.Block.MinerID, bi.Hash)
 
     lastChanged = false
 
@@ -211,6 +214,11 @@ func (bc *BlockChain) pushBlockJsonInternal(json string, needVerifyInfo bool) (l
 
     bc.BlockMutex.Lock()
     defer bc.BlockMutex.Unlock()
+
+    if _, ok := bc.Blocks[bi.Hash]; ok {
+        return false, fmt.Errorf("Push block failed: block exist: %s.", bi.Hash)
+    }
+
     bc.UserMutex.Lock()
     defer bc.UserMutex.Unlock()
     bc.TransactionMutex.Lock()
@@ -227,7 +235,6 @@ func (bc *BlockChain) PushTransaction(t *pb.Transaction, needVerifyInfo bool) bo
 
     if (needVerifyInfo) {
         if err := bc.verifyTransactionInfo(t); err != nil {
-            log.Fatalf("PushTransaction: %v", err)
             return false
         }
     }
@@ -240,7 +247,6 @@ func (bc *BlockChain) PushTransaction(t *pb.Transaction, needVerifyInfo bool) bo
 
     // NOTE:: We still need to check this, since side-chain transactions may not appear in PendingTransactions.
     if err := bc.verifyTransactionExist(t); err != nil {
-        log.Fatalf("PushTransaction: %v", err)
         return false
     }
 
@@ -286,6 +292,10 @@ func (bc *BlockChain) VerifyTransaction6(t *pb.Transaction) (rc int, hash string
 
     // the transactions in PendingTransactions
     if bc.PendingTransactions.Has(t) {
+        err := bc.verifyTransactionMoney(t)
+        if (err != nil) {
+            return 0, "?"
+        }
         return 1, "!"
     }
 
@@ -389,7 +399,6 @@ func (bc *BlockChain) addPendingTransaction(t *pb.Transaction) bool {
 
     if !bc.inTransactionRecovery {
         ok := <-diskDone
-        log.Fatalf("addPendingTransaction: disk failed.")
         return ok
     }
 
@@ -459,7 +468,7 @@ func (bc *BlockChain) refreshBlockChain(bi *BlockInfo) (latestChanged bool, err 
     }
 
     if !latestChanged {
-        log.Printf("!! LatestBlock change failed: %s. Remains %s. Prechecking failed.", bi.Hash, bc.LatestBlock.Hash)
+        log.Printf("!! LatestBlock change failed (pre-checking stage): %s.\n    Remains %s.", bi.Hash, bc.LatestBlock.Hash)
         return
     }
 
@@ -472,7 +481,7 @@ func (bc *BlockChain) refreshBlockChain(bi *BlockInfo) (latestChanged bool, err 
     if latestChanged {
         log.Printf("!! LatestBlock changed to: %s.", bc.LatestBlock.Hash)
     } else {
-        log.Printf("!! LatestBlock change failed: %s. Remain %s.", bi.Hash, bc.LatestBlock.Hash)
+        log.Printf("!! LatestBlock change failed (execution stage): %s.\n    Remain %s.", bi.Hash, bc.LatestBlock.Hash)
     }
 
     return

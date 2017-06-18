@@ -122,31 +122,40 @@ func (m *HonestMinerMaster) Start() {
 
 func (m *HonestMinerMaster) GetBlock(bid string) *BlockInfo {
     b, ok := m.BC.GetBlock(bid)
-    if !ok {
+    if !ok || !b.OnLongest {
         return nil
     }
     return b
 }
 
 func (m *HonestMinerMaster) OnClientTransactionAsync(t *pb.Transaction) bool {
+    m.updateMutex.Lock()
+    defer m.updateMutex.Unlock()
+
     // Broadcast::
     if true {
         res := m.P2PC.RemotePushTransactionAsync(t)
         msg := res.Get()
         res.IgnoreLater()
         if msg == nil {
-            log.Printf("FUCKKKKKKKKKK: %s.", msg)
             return false
         }
     }
+
     return m.processTransaction(t)
 }
 
 func (m *HonestMinerMaster) OnTransactionAsync(t *pb.Transaction) {
+    m.updateMutex.Lock()
+    defer m.updateMutex.Unlock()
+
     _ = m.processTransaction(t)
 }
 
 func (m *HonestMinerMaster) OnBlockAsync(json string) {
+    m.updateMutex.Lock()
+    defer m.updateMutex.Unlock()
+
     lastChanged, _ := m.BC.PushBlockJson(json)
     if lastChanged {
         m.updateWorkingSet(true, false)
@@ -154,6 +163,9 @@ func (m *HonestMinerMaster) OnBlockAsync(json string) {
 }
 
 func (m *HonestMinerMaster) OnWorkerSuccess(json string, hash string) {
+    m.updateMutex.Lock()
+    defer m.updateMutex.Unlock()
+
     _, err := m.BC.DeclareBlockJson(json)
     if err == nil {
         log.Printf("!! Mined: hash=%s.", hash)
@@ -180,10 +192,7 @@ func (m *HonestMinerMaster) processTransaction(t *pb.Transaction) bool {
 }
 
 func (m *HonestMinerMaster) updateWorkingSet(forceUpdate bool, allowSame bool) {
-    // log.Printf("UpdateWorkingSet invoked, forceUpdate=%v.", forceUpdate)
-
-    m.updateMutex.Lock()
-    defer m.updateMutex.Unlock()
+    // log.Printf("Updating working set invoked: ForceUpdate=%v AllowSame=%v NeedLock=%v.", forceUpdate, allowSame, needLock)
 
     if !forceUpdate {
         // Check non-working workers first
@@ -215,7 +224,7 @@ func (m *HonestMinerMaster) updateWorkingSet(forceUpdate bool, allowSame bool) {
 }
 
 func (m *HonestMinerMaster) updateWorkingSetInternal(forceUpdate bool, allowSame bool) bool {
-    // log.Printf("Updating working set invoked: ForceUpdate=%v AllowSame=%v.", forceUpdate, allowSame)
+    // log.Printf("Updating working set internal invoked: ForceUpdate=%v AllowSame=%v NeedLock=%v.", forceUpdate, allowSame, needLock)
 
     validTransactions := make([]*pb.Transaction, 0)
 
@@ -240,7 +249,6 @@ func (m *HonestMinerMaster) updateWorkingSetInternal(forceUpdate bool, allowSame
             }
         }
     }
-
 
     if len(validTransactions) == 0 {
         // Sleep for a little while for several incoming messages.
@@ -318,7 +326,7 @@ func (m *HonestMinerMaster) updateWorkingSetInternal(forceUpdate bool, allowSame
         return false
     }
 
-    // log.Printf("Updating working set: BlockID=%d.\nData=%s.", block.BlockID, json)
+    // log.Printf("Updating working set: BlockID=%d.", block.BlockID)
 
     prefix, suffix := presuf[0], presuf[1]
     prefix = prefix + "\"Nonce\":\""
