@@ -19,8 +19,8 @@ type BlockInfo struct {
     Json string
     Block *pb.Block
 
-    //Valid6: on the longest branch
-    Valid6 bool
+    //OnLongest: on the longest branch
+    OnLongest bool
 }
 
 type BlockChain struct {
@@ -62,7 +62,7 @@ func NewBlockChain(c *ServerConfig, p2pc *P2PClient) (bc *BlockChain) {
             Json: "{}",
             Block: &pb.Block{BlockID: 0},
             Hash: strings.Repeat("0", 64),
-            Valid6: true,
+            OnLongest: true,
         },
         Trans2Blocks: make(map[string][]*BlockInfo),
 
@@ -119,7 +119,7 @@ func (bc *BlockChain) pushBlockJsonInternal(json string, needVerifyInfo bool) (l
         Json: json,
         Hash: GetHashString(json),
         Block: block,
-        Valid6: false,
+        OnLongest: false,
     }
 
     log.Printf("Push block internal: Json=%s, Hash=%s.", json, bi.Hash)
@@ -147,6 +147,8 @@ func (bc *BlockChain) pushBlockJsonInternal(json string, needVerifyInfo bool) (l
 func (bc *BlockChain) PushTransaction(t *pb.Transaction, needVerifyInfo bool) (rc int) {
     // Verify transaction based on current info
     // RC: 0=fail, 1=ok, 2=already-in-current-chain
+
+    log.Printf("Push transaction: %s.", t.UUID)
 
     if (needVerifyInfo) {
         if err := bc.verifyTransactionInfo(t); err != nil {
@@ -201,7 +203,7 @@ func (bc *BlockChain) VerifyTransaction6(t *pb.Transaction) (rc int, hash string
 
     if blocks, ok := bc.Trans2Blocks[t.UUID]; ok {
         for _, block := range blocks {
-            if block.Valid6 && block.Block.BlockID >= bc.LatestBlock.Block.BlockID - 6 {
+            if block.OnLongest && block.Block.BlockID >= bc.LatestBlock.Block.BlockID - 6 {
                 return 2, block.Hash
             }
         }
@@ -242,14 +244,14 @@ func (bc *BlockChain) GetUserInfoAtomic(uid string) (u *UserInfo) {
 // Private: Execution
 
 func (bc *BlockChain) doBlock(x *BlockInfo) {
-    x.Valid6 = true
+    x.OnLongest = true
     for _, trans := range x.Block.Transactions {
         bc.doTransaction(trans)
     }
 }
 
 func (bc *BlockChain) undoBlock(x *BlockInfo) {
-    x.Valid6 = false
+    x.OnLongest = false
     s := x.Block.Transactions
     for i := len(s) - 1; i >= 0; i-- {
         bc.undoTransaction(s[i])
@@ -277,6 +279,7 @@ func (bc *BlockChain) undoTransaction(t *pb.Transaction) (err error) {
 func (bc *BlockChain) addBlock(bi *BlockInfo) {
     // Add a verified (info only, no transactions) into the database
     // Require BlockMutex
+    log.Printf("Add block: BlockID=%d, Hash=%s.\n", bi.Block.BlockID, bi.Hash)
 
     bc.Blocks[bi.Hash] = bi
     for _, trans := range bi.Block.Transactions {
@@ -328,14 +331,15 @@ func (bc *BlockChain) extendLatestBlock(bi *BlockInfo) (succ bool) {
 
 func (bc *BlockChain) switchLatestBlock(source *BlockInfo, target *BlockInfo) (succ bool) {
     x, y := source, target
-    z := bc.findBlockLCA(x, y)
 
     succ = bc.switchLatestBlock_complete(y)
     if !succ {
         return
     }
 
-    // TODO:: delete inValid6 block
+    z := bc.findBlockLCA(x, y)
+
+    // TODO:: delete invalid block
     // NOTE(MJY):: Need undo "Trans2Blocks" too.
 
     undos := make([]*BlockInfo, 0)
@@ -375,14 +379,23 @@ func (bc *BlockChain) switchLatestBlock_complete(bi *BlockInfo) (succ bool) {
 
     for {
         prev := bi.Block.PrevHash
-        if _, ok := bc.Blocks[prev]; ok {
+
+        if len(prev) == 0 || bi.Block.OnLongest {
             break
+        }
+
+        log.Printf("Try to complete: %s.", prev)
+        if _, ok := bc.Blocks[prev]; ok {
+            log.Printf("Completion succeeded on: %s (EXIST).", prev)
+            bi = bc.Blocks[prev]
+            continue
         }
 
         response := bc.p2pc.RemoteGetBlock(prev)
         for {
             msg := response.Get()
             if msg == nil {
+                log.Printf("Completion failed on: %s.\n", prev)
                 return false
             }
 
@@ -398,7 +411,7 @@ func (bc *BlockChain) switchLatestBlock_complete(bi *BlockInfo) (succ bool) {
                 Json: json,
                 Hash: GetHashString(json),
                 Block: block,
-                Valid6: false,
+                OnLongest: false,
             }
 
             if prev != newBi.Hash {
@@ -406,7 +419,8 @@ func (bc *BlockChain) switchLatestBlock_complete(bi *BlockInfo) (succ bool) {
             }
 
             if err = bc.verifyBlockInfo(newBi); err != nil {
-                bc.Blocks[prev] = newBi
+                log.Printf("Completion succeeded on: %s (QUERY).", prev)
+                bc.addBlock(newBi)
                 response.AcquireClose()
                 break
             }
@@ -452,12 +466,12 @@ func (bc *BlockChain) switchLatestBlock_undodo(undos []*BlockInfo, dos []*BlockI
 
 func (bc *BlockChain) verifyBlockInfo(bi *BlockInfo) (err error) {
     if !CheckHash(bi.Hash) {
-        return fmt.Errorf("Verify block failed, inValid6 hash: %s.", bi.Hash)
+        return fmt.Errorf("Verify block failed, invalid hash: %s.", bi.Hash)
     }
 
     // Check hex
     if !CheckNonce(bi.Block.Nonce) {
-        return fmt.Errorf("Verify block failed, inValid6 nonce: %s.", bi.Block.Nonce)
+        return fmt.Errorf("Verify block failed, invalid nonce: %s.", bi.Block.Nonce)
     }
 
     // TODO:: Check minerid, etc.
@@ -488,12 +502,12 @@ func (bc *BlockChain) verifyBlockTransaction(bi *BlockInfo) (err error) {
         }
     }
 
-    // Check Valid6ity
+    // Check OnLongestity
     stack := NewBlockChainTStack(bc, false, false)
     defer stack.Close()
     for _, t := range b.Transactions {
         if !stack.TestAndDo(t) {
-            return fmt.Errorf("Verify block failed, transaction amount inValid6: %s.", t.UUID)
+            return fmt.Errorf("Verify block failed, transaction amount invalid: %s.", t.UUID)
         }
     }
 
@@ -540,7 +554,7 @@ func (bc *BlockChain) verifyTransactionRepeat(t *pb.Transaction) (err error) {
 
     if blocks, ok := bc.Trans2Blocks[t.UUID]; ok {
         for _, block := range blocks {
-            if block.Valid6 {
+            if block.OnLongest {
                 return fmt.Errorf("Verify block failed, transaction exists: %s.", t.UUID)
             }
         }

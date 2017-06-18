@@ -47,7 +47,7 @@ type MinerMaster interface {
     OnBlockAsync(json string)
     OnTransactionAsync(t *pb.Transaction)
 
-    OnWorkerSuccess(json string)
+    OnWorkerSuccess(json string, hash string)
 }
 
 func NewMinerMaster(c *ServerConfig) (master MinerMaster, e error) {
@@ -153,9 +153,10 @@ func (m *HonestMinerMaster) OnBlockAsync(json string) {
     }
 }
 
-func (m *HonestMinerMaster) OnWorkerSuccess(json string) {
+func (m *HonestMinerMaster) OnWorkerSuccess(json string, hash string) {
     _, err := m.BC.DeclareBlockJson(json)
     if err == nil {
+        log.Printf("!! Mined: hash=%s.", hash)
         _ = m.P2PC.RemotePushBlockAsync(json)
         m.updateWorkingSet(true)
     } else {
@@ -178,6 +179,8 @@ func (m *HonestMinerMaster) processTransaction(t *pb.Transaction) bool {
 }
 
 func (m *HonestMinerMaster) updateWorkingSet(forceUpdate bool) {
+    log.Printf("UpdateWorkingSet invoked, forceUpdate=%v.", forceUpdate)
+
     m.updateMutex.Lock()
     defer m.updateMutex.Unlock()
 
@@ -196,6 +199,21 @@ func (m *HonestMinerMaster) updateWorkingSet(forceUpdate bool) {
         }
     }
 
+    if m.updateWorkingSetInternal(forceUpdate) {
+        return
+    }
+
+    if forceUpdate {
+        log.Printf("UpdateWorkingBlock: stopping workers.")
+        for _, w := range m.workers {
+            if w.Working() {
+                w.UpdateWorkingBlock("", "")
+            }
+        }
+    }
+}
+
+func (m *HonestMinerMaster) updateWorkingSetInternal(forceUpdate bool) bool {
     st := NewBlockChainTStack(m.BC, true, true)
     defer st.Close()
 
@@ -216,7 +234,7 @@ func (m *HonestMinerMaster) updateWorkingSet(forceUpdate bool) {
     }
 
     if len(validTransactions) == 0 {
-        return
+        return false
     }
 
     // Note:: here, we have BlockMutex.R, UserMutex.R
@@ -230,16 +248,16 @@ func (m *HonestMinerMaster) updateWorkingSet(forceUpdate bool) {
 
     json, err := m.jsonMarshaler.MarshalToString(block)
     if err != nil {
-        return
+        return false
     }
 
     presuf := strings.Split(json, "\"Nonce\":\"00000000\"")
     // Sanity check
     if len(presuf) != 2 {
-        return
+        return false
     }
 
-    log.Printf("Updating working set: %s.", json)
+    log.Printf("Updating working set: BlockID=%d.\nData=%s.", block.BlockID, json)
 
     prefix, suffix := presuf[0], presuf[1]
     prefix = prefix + "\"Nonce\":\""
@@ -250,5 +268,5 @@ func (m *HonestMinerMaster) updateWorkingSet(forceUpdate bool) {
         }
     }
 
-    // log.Printf("Updated working set.")
+    return true
 }

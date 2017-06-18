@@ -12,5 +12,5 @@ func GetHashBytes(String string) [32]byte {
 }
 
 func CheckHash(Hash string) bool {
-	return Hash[0:2]=="00"
+	return Hash[0:5]=="00000"
 }

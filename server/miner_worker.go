@@ -2,7 +2,10 @@ package main
 
 import (
     "fmt"
+    "log"
     "sync"
+    "strings"
+    "math/rand"
 )
 
 type MinerWorker interface {
@@ -19,6 +22,7 @@ type SimpleMinerWorker struct {
     changec *sync.Cond
     mutex *sync.Mutex
     working bool
+    rng *rand.Rand
 }
 
 func NewSimpleMinerWorker(m MinerMaster) (w *SimpleMinerWorker) {
@@ -28,8 +32,10 @@ func NewSimpleMinerWorker(m MinerMaster) (w *SimpleMinerWorker) {
         suffix: "",
         change: false,
         mutex: &sync.Mutex{},
+        rng: rand.New(rand.NewSource(rand.Int63())),
     }
     w.changec = sync.NewCond(w.mutex)
+    log.Printf("Worker %p initialized: Seed=%d.\n", w, w.rng.Uint32())
     return
 }
 
@@ -66,7 +72,9 @@ func (w *SimpleMinerWorker) Mainloop() {
         w.mutex.Lock()
 
         if !w.working {
-            w.changec.Wait()
+            if !w.change {
+                w.changec.Wait()
+            }
             changed = true
         } else {
             changed = w.change
@@ -80,19 +88,23 @@ func (w *SimpleMinerWorker) Mainloop() {
         }
         w.change = false
 
+        if len(prefix) == 0 && len(suffix) == 0 {
+            w.working = false
+        }
+
         w.mutex.Unlock()
 
         if w.working {
-            for i := 0; i <= 100; i++ {
-                nonce := fmt.Sprintf("%08x", next)
+            for i := 0; i <= 10000; i++ {
+                nonce := fmt.Sprintf("%08x", w.rng.Uint32())
 
-                str := prefix + nonce + suffix
+                str := strings.Join([]string{prefix, nonce, suffix}, "")
                 hash := GetHashString(str)
                 succ := CheckHash(hash)
 
                 if succ {
                     w.working = false
-                    w.master.OnWorkerSuccess(str)
+                    w.master.OnWorkerSuccess(str, hash)
                     break
                 }
 

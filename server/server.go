@@ -46,7 +46,11 @@ func (s *Server) Transfer(ctx context.Context, in *pb.Transaction) (*pb.BooleanR
 
 func (s *Server) GetBlock(ctx context.Context, in *pb.GetBlockRequest) (*pb.JsonBlockString, error) {
     bi := s.Master.GetBlock(in.BlockHash)
-    return &pb.JsonBlockString{Json: bi.Json}, nil
+    if bi != nil {
+        return &pb.JsonBlockString{Json: bi.Json}, nil
+    } else {
+        return &pb.JsonBlockString{Json: ""}, nil
+    }
 }
 func (s *Server) PushBlock(ctx context.Context, in *pb.JsonBlockString) (*pb.Null, error) {
     s.Master.OnBlockAsync(in.Json)
