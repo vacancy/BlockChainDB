@@ -329,18 +329,28 @@ func (bc *BlockChain) GetUserInfoAtomic(uid string) (u *UserInfo) {
 // Private: Execution
 
 func (bc *BlockChain) doBlock(x *BlockInfo) {
+    var totalFee int32 = 0
     x.OnLongest = true
     for _, trans := range x.Block.Transactions {
         bc.doTransaction(trans)
+        totalFee += trans.MiningFee
     }
+
+    // Mining fee is computed at last
+    bc.setDefaultUserInfo(x.Block.MinerID).Money += totalFee
 }
 
 func (bc *BlockChain) undoBlock(x *BlockInfo) {
+    var totalFee int32 = 0
     x.OnLongest = false
     s := x.Block.Transactions
     for i := len(s) - 1; i >= 0; i-- {
         bc.undoTransaction(s[i])
+        totalFee += s[i].MiningFee
     }
+
+    // Undo the mining fee.
+    bc.setDefaultUserInfo(x.Block.MinerID).Money -= totalFee
 }
 
 func (bc *BlockChain) doTransaction(t *pb.Transaction) (err error) {

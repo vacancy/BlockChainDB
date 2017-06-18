@@ -46,12 +46,12 @@ func (st *BlockChainTStack) Undo(t *pb.Transaction) {
     _ = st.undoTransaction(t)
 }
 
-func (st *BlockChainTStack) UndoBlock(bi *BlockInfo) {
-    s := bi.Block.Transactions
-    for i := len(s) - 1; i >= 0; i-- {
-        st.Undo(s[i])
-    }
-}
+// func (st *BlockChainTStack) UndoBlock(bi *BlockInfo) {
+//     s := bi.Block.Transactions
+//     for i := len(s) - 1; i >= 0; i-- {
+//         st.Undo(s[i])
+//     }
+// }
 
 func (st *BlockChainTStack) TestAndDo(t *pb.Transaction) (succ bool) {
     if ok := st.verifyTransaction(t); ok {
@@ -61,14 +61,14 @@ func (st *BlockChainTStack) TestAndDo(t *pb.Transaction) (succ bool) {
     return false
 }
 
-func (st *BlockChainTStack) TestAndDoBlock(bi *BlockInfo) (succ bool) {
-    for _, trans := range bi.Block.Transactions {
-        if ok := st.TestAndDo(trans); !ok {
-            return false
-        }
-    }
-    return true
-}
+// func (st *BlockChainTStack) TestAndDoBlock(bi *BlockInfo) (succ bool) {
+//     for _, trans := range bi.Block.Transactions {
+//         if ok := st.TestAndDo(trans); !ok {
+//             return false
+//         }
+//     }
+//     return true
+// }
 
 func (st *BlockChainTStack) getMoney(uid string) (money int32) {
     if money, ok := st.UserMoney[uid]; ok {
