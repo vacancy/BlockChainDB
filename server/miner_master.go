@@ -106,9 +106,12 @@ func (m *HonestMinerMaster) Recover() (err error) {
 
 func (m *HonestMinerMaster) Start() {
     // Start workers
+    totalRange := (1 << 32)
+    rangeSize := int(totalRange / m.config.Miner.NrWorkers)
+
     for i := 0; i < m.config.Miner.NrWorkers; i++ {
         log.Printf("Starting worker #%d", i)
-        w := NewSimpleMinerWorker(m)
+        w := NewSimpleMinerWorker(m, rangeSize * i, rangeSize * (i + 1))
         m.workers = append(m.workers, w)
         go w.Mainloop()
     }
@@ -215,6 +218,7 @@ func (m *HonestMinerMaster) updateWorkingSetInternal(forceUpdate bool) bool {
     validTransactions := make([]*pb.Transaction, 0)
 
     nrProcessed := 0
+    nrMaxProcessed := m.config.Miner.HonestMinerConfig.MaxIncomingProcess
     for _, trans := range m.BC.PendingTransactions {
         if st.TestAndDo(trans) {
             validTransactions = append(validTransactions, trans)
@@ -222,7 +226,7 @@ func (m *HonestMinerMaster) updateWorkingSetInternal(forceUpdate bool) bool {
         nrProcessed += 1
 
         // TODO:: config: 100, 50
-        if (len(validTransactions) > 0 && nrProcessed > 100) || len(validTransactions) == 50 {
+        if (len(validTransactions) > 0 && nrProcessed > nrMaxProcessed) || len(validTransactions) == m.config.Common.MaxBlockSize {
             break
         }
     }
